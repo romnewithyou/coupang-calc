@@ -1145,7 +1145,7 @@ function prevProd() {
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
     <div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">수수료 차감 실수령</div>
-      <div style="font-size:12px;font-weight:600;">₩${fmt(rev)}</div>
+      <div style="font-size:12px;font-weight:600;">₩${fmt(sp - sp*fee/100)}</div>
     </div>
     <div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">쿠팡 비용 합계 (VAT포함)</div>
@@ -1252,6 +1252,7 @@ function delStock(sid) {
   D.stock = D.stock.filter(s=>s.id!==sid);
   dbSave(); renderPage(currentPage);
 }
+function openStockModal(pid) {
   const p=getProd(pid);
   costMode='stock'; editCostId=pid;
   document.getElementById('m-cost-title').textContent=`사입 입력 — ${p.name}`;
