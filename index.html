@@ -1412,7 +1412,7 @@ function applyTheme() {
 }
 
 document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.page)));
-document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
+document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{/* 바깥 클릭으로 닫기 비활성화 */}));
 
 const MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 function updateDate() {
