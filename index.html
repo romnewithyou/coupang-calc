@@ -524,7 +524,7 @@ function renderProducts() {
             <td class="${nc(up)}">₩${fmt(up)}</td>
             <td class="${nc(margin)}">${fmtf(margin)}%${margin>=getMarginTarget()?'':' ⚠️'}</td>
             <td style="font-size:11px;">
-              ${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0)+(p.logisticsCost||0)+(p.deliveryCost||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)}<br><span style="font-size:9px;">${ok?'✅ 여유 ₩'+fmt(c-cur):'❌ 초과 ₩'+fmt(cur-c)}</span></span>`;})()}
+              ${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)}<br><span style="font-size:9px;">${ok?'✅ 여유 ₩'+fmt(c-cur):'❌ 초과 ₩'+fmt(cur-c)}</span></span>`;})()}
             </td>
             <td style="font-size:12px;font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er)+'%':'-';})()}</td>
             <td class="${stk<0?'neg':stk<20?'neg':''}">${stk}개${stk<0?' ⚠️':stk<20?' ⚠️':''}</td>
@@ -822,7 +822,7 @@ function renderAnalysis() {
             return `<tr>
               <td><strong>${p.name}</strong></td><td>₩${fmt(sp)}</td>
               <td class="${nc(up)}">₩${fmt(up)}</td><td class="${nc(mg)}">${fmtf(mg)}%${mg>=getMarginTarget()?'':' ⚠️'}</td>
-              <td style="font-size:11px;">${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0)+(p.logisticsCost||0)+(p.deliveryCost||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)} ${ok?'✅':'❌'}</span>`;})()}</td>
+              <td style="font-size:11px;">${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)} ${ok?'✅':'❌'}</span>`;})()}</td>
               <td style="font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er)+'%':'-';})()}</td>
               <td>${fmt(qty)}</td><td>₩${fmt(rev)}</td>
               <td class="${nc(prof)}">${prof<0?'-':''}₩${fmt(Math.abs(prof))}</td>
@@ -1144,7 +1144,7 @@ function prevProd() {
   const mg = sp > 0 ? profit / sp * 100 : 0;
   const targetMg = getMarginTarget();
   const ceiling = sp - (feeAmt + logistics) * 1.1 - sp * targetMg / 100;
-  const ceilOk = cost <= ceiling;
+  const ceilOk = pp <= ceiling;
   const endRoas = profit>0 ? (sp/profit)*1.1 : null; // profit은 이미 VAT반영, ×1.1은 광고비VAT
   const profitCol = profit>=0?'var(--green)':'var(--red)';
   const ceilCol = ceilOk?'var(--green)':'var(--red)';
@@ -1169,7 +1169,7 @@ function prevProd() {
     <div style="grid-column:span 2;padding-top:6px;border-top:1px solid var(--border);">
       <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">원가 상한선 (목표 마진 ${targetMg}% 기준) · 현재 원가 ${ceilOk?'✅ 적합':'❌ 초과'}</div>
       <div style="font-size:12px;font-weight:700;color:${ceilCol};">
-        상한선 ₩${fmt(ceiling)} · 현재 ₩${fmt(cost)} · 여유 ${ceilOk?'+':''} ₩${fmt(ceiling-cost)}
+        상한선 ₩${fmt(ceiling)} · 현재 사입단가 ₩${fmt(pp)} · 여유 ${ceilOk?'+':''} ₩${fmt(ceiling-pp)}
       </div>
     </div>
   </div>`;
