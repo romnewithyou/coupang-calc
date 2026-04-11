@@ -526,7 +526,7 @@ function renderProducts() {
             <td style="font-size:11px;">
               ${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0)+(p.logisticsCost||0)+(p.deliveryCost||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)}<br><span style="font-size:9px;">${ok?'✅ 여유 ₩'+fmt(c-cur):'❌ 초과 ₩'+fmt(cur-c)}</span></span>`;})()}
             </td>
-            <td style="font-size:12px;font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er*100)+'%':'-';})()}</td>
+            <td style="font-size:12px;font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er)+'%':'-';})()}</td>
             <td class="${stk<0?'neg':stk<20?'neg':''}">${stk}개${stk<0?' ⚠️':stk<20?' ⚠️':''}</td>
             <td class="${nc(mp)}">${mp<0?'-':''}₩${fmt(Math.abs(mp))}</td>
             <td>
@@ -823,7 +823,7 @@ function renderAnalysis() {
               <td><strong>${p.name}</strong></td><td>₩${fmt(sp)}</td>
               <td class="${nc(up)}">₩${fmt(up)}</td><td class="${nc(mg)}">${fmtf(mg)}%${mg>=getMarginTarget()?'':' ⚠️'}</td>
               <td style="font-size:11px;">${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0)+(p.logisticsCost||0)+(p.deliveryCost||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)} ${ok?'✅':'❌'}</span>`;})()}</td>
-              <td style="font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er*100)+'%':'-';})()}</td>
+              <td style="font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er)+'%':'-';})()}</td>
               <td>${fmt(qty)}</td><td>₩${fmt(rev)}</td>
               <td class="${nc(prof)}">${prof<0?'-':''}₩${fmt(Math.abs(prof))}</td>
               <td>${adcost?'₩'+fmt(adcost):'-'}</td><td>${roas}</td>
