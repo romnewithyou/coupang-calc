@@ -118,7 +118,14 @@ tbody tr:last-child td{border-bottom:none;}
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
-@media(min-width:640px){.stat-grid{grid-template-columns:repeat(4,1fr);}#app{padding-left:20px;padding-right:20px;}}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:640px){
+  .chart-grid{grid-template-columns:1fr;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .fgrid{grid-template-columns:1fr;}
+  .span2{grid-column:span 1;}
+  .prod-stats{grid-template-columns:repeat(3,1fr);}
+}
 </style>
 </head>
 <body>
@@ -149,7 +156,8 @@ tbody tr:last-child td{border-bottom:none;}
 <div class="overlay" id="m-sale"><div class="modal"><div class="mh"><span class="mt" id="ms-title">판매 입력</span><button class="close-btn" onclick="closeModal('m-sale')">×</button></div><div class="mb" id="ms-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-sale')">취소</button><button class="btn btn-primary" onclick="saveSale()">저장</button></div></div></div>
 <div class="overlay" id="m-stock"><div class="modal"><div class="mh"><span class="mt" id="mst-title">사입 입력</span><button class="close-btn" onclick="closeModal('m-stock')">×</button></div><div class="mb" id="mst-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-stock')">취소</button><button class="btn btn-primary" onclick="saveStock()">저장</button></div></div></div>
 <div class="overlay" id="m-cost"><div class="modal"><div class="mh"><span class="mt" id="mc-title">비용 추가</span><button class="close-btn" onclick="closeModal('m-cost')">×</button></div><div class="mb" id="mc-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-cost')">취소</button><button class="btn btn-primary" onclick="saveCost()">저장</button></div></div></div>
-<div class="overlay" id="m-ad"><div class="modal"><div class="mh"><span class="mt" id="mad-title">광고비 입력</span><button class="close-btn" onclick="closeModal('m-ad')">×</button></div><div class="mb" id="mad-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-ad')">취소</button><button class="btn btn-primary" onclick="saveAd()">저장</button></div></div></div><div class="modal"><div class="mh"><span class="mt">목표 설정</span><button class="close-btn" onclick="closeModal('m-goal')">×</button></div><div class="mb" id="mg-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-goal')">취소</button><button class="btn btn-primary" onclick="saveGoal()">저장</button></div></div></div>
+<div class="overlay" id="m-ad"><div class="modal"><div class="mh"><span class="mt" id="mad-title">광고비 입력</span><button class="close-btn" onclick="closeModal('m-ad')">×</button></div><div class="mb" id="mad-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-ad')">취소</button><button class="btn btn-primary" onclick="saveAd()">저장</button></div></div></div>
+<div class="overlay" id="m-goal"><div class="modal"><div class="mh"><span class="mt">목표 설정</span><button class="close-btn" onclick="closeModal('m-goal')">×</button></div><div class="mb" id="mg-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-goal')">취소</button><button class="btn btn-primary" onclick="saveGoal()">저장</button></div></div></div>
 
 <script>
 let db;
@@ -183,7 +191,8 @@ function pendingSettlement(){const now=new Date();return D.sales.filter(s=>settl
 
 let currentPage='home',openProdId=null,openProdTab={},costMode='base',editCostId=null,editProdId=null,saleProdId=null,stockProdId=null,stockEditId=null,extraCatFilter='',chartInstances={};
 
-function navigate(page){currentPage=page;document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));render();}
+function navigate(page){currentPage=page;document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));closeAllModals();render();}
+function closeAllModals(){['m-product','m-sale','m-stock','m-cost','m-ad','m-goal'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('open');});}
 function render(){const pages={home:renderHome,products:renderProducts,costs:renderCosts,analysis:renderAnalysis,settings:renderSettings};document.getElementById('app').innerHTML=pages[currentPage]();if(currentPage==='home')setTimeout(renderHomeChart,50);if(currentPage==='analysis')setTimeout(renderAnalysisCharts,50);}
 
 function renderHome(){
@@ -465,9 +474,9 @@ function renderAnalysis(){
   for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({label:`${d.getMonth()+1}월`,y:d.getFullYear(),mo:d.getMonth()});}
   return `
   <div class="sh"><div class="sh-title">분석</div></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-    <div class="card"><div class="stat-label" style="margin-bottom:8px;">월별 순수익</div><div style="height:130px;"><canvas id="ch-monthly"></canvas></div></div>
-    <div class="card"><div class="stat-label" style="margin-bottom:8px;">상품별 순수익</div><div style="height:130px;"><canvas id="ch-prods"></canvas></div></div>
+  <div class="chart-grid" style="margin-bottom:12px;">
+    <div class="card"><div class="stat-label" style="margin-bottom:8px;">월별 순수익</div><div style="height:160px;"><canvas id="ch-monthly"></canvas></div></div>
+    <div class="card"><div class="stat-label" style="margin-bottom:8px;">상품별 순수익</div><div style="height:160px;"><canvas id="ch-prods"></canvas></div></div>
   </div>
   <div class="card" style="margin-bottom:12px;">
     <div class="sh-title" style="margin-bottom:10px;">상품별 지표</div>
