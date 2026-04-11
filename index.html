@@ -287,10 +287,17 @@ const FEES = {'패션의류/잡화':10.8,'뷰티/헬스':10.8,'생활/주방':10
 const getCnyRate = () => D.settings?.cnyRate || 310;
 const getMarginTarget = () => D.settings?.marginTarget || 40;
 
-// 엔드 ROAS: 판매가/마진 × 1.1 (광고비에도 VAT 붙으니까) — % 단위 반환
+// 엔드 ROAS: 판매가/마진 × 1.1 (광고비 VAT 포함) — % 단위 반환
+// unitProfit 이 이미 VAT 반영된 마진이므로 여기선 ×1.1만 추가
 function calcEndRoas(p) {
-  const up = unitProfit(p);
-  return up > 0 ? (p.sellingPrice / up) * 1.1 * 100 : null;
+  const sp = p.sellingPrice || 0;
+  const feeAmt = sp * (p.feeRate||0) / 100;
+  const logistics = (p.logisticsCost||0) + (p.deliveryCost||0);
+  const coupangCost = (feeAmt + logistics) * 1.1;
+  const margin = sp - coupangCost - (p.purchasePrice||0);
+  if (margin <= 0) return null;
+  // 엔드ROAS = 판매가 / 마진 × 1.1 (광고비에 VAT 붙으므로)
+  return (sp / margin) * 1.1 * 100;
 }
 // 원가 상한선: 목표 마진율 기준 최대 허용 사입단가
 // 마진 = sp - (수수료+물류)×1.1 - 원가 ≥ sp×targetMargin/100
@@ -1136,9 +1143,9 @@ function prevProd() {
   const profit = sp - coupangCost - pp;
   const mg = sp > 0 ? profit / sp * 100 : 0;
   const targetMg = getMarginTarget();
-  const ceiling = sp*(1-fee/100-targetMg/100);
+  const ceiling = sp - (feeAmt + logistics) * 1.1 - sp * targetMg / 100;
   const ceilOk = cost <= ceiling;
-  const endRoas = profit>0 ? (sp/profit)*1.1 : null;
+  const endRoas = profit>0 ? (sp/profit)*1.1 : null; // profit은 이미 VAT반영, ×1.1은 광고비VAT
   const profitCol = profit>=0?'var(--green)':'var(--red)';
   const ceilCol = ceilOk?'var(--green)':'var(--red)';
   el.innerHTML=`
