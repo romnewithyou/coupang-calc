@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쿠팡 순수익 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #f78166;
+  --accent2: #e8614f;
+  --green: #3fb950;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --yellow: #e3b341;
+  --sidebar: 220px;
+}
+html.light {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface2: #f0f1f3;
+  --border: #dde1e7;
+  --text: #1a1d23;
+  --muted: #6b7280;
+  --accent: #e8503a;
+  --accent2: #d4432e;
+  --green: #1a7f37;
+  --red: #cf222e;
+  --blue: #0969da;
+  --yellow: #9a6700;
+}
+html.light tbody tr:hover td{background:rgba(0,0,0,.025);}
+html.light .overlay{background:rgba(0,0,0,.45);}
+/* Theme toggle button */
+#theme-toggle{background:var(--surface2);border:1px solid var(--border);color:var(--muted);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+#theme-toggle:hover{color:var(--text);border-color:var(--muted);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;}
+/* Sidebar */
+#sidebar{width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;}
+.logo{padding:18px 16px;border-bottom:1px solid var(--border);}
+.logo h1{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:-0.3px;}
+.logo p{font-size:10px;color:var(--muted);margin-top:2px;}
+.nav{padding:10px 0;flex:1;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:10px 16px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-left:3px solid transparent;transition:all .15s;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--surface2);color:var(--text);border-left-color:var(--accent);}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.sidebar-footer{padding:12px 16px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);}
+/* Main */
+#main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+#header{background:var(--surface);border-bottom:1px solid var(--border);padding:11px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.h-title{font-size:14px;font-weight:700;}
+.h-actions{display:flex;gap:8px;}
+#content{padding:22px;flex:1;}
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px;}
+.c-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.c-value{font-size:24px;font-weight:800;letter-spacing:-1px;}
+.c-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+/* Grids */
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.g2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .15s;white-space:nowrap;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+.btn-secondary:hover{background:var(--border);}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted);}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-sm{padding:3px 8px;font-size:11px;}
+/* Tables */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{background:var(--surface2);padding:9px 11px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:hover td{background:rgba(255,255,255,.02);}
+tbody tr:last-child td{border-bottom:none;}
+/* Forms */
+.fg{margin-bottom:12px;}
+.fl{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;display:block;}
+.fi{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:13px;font-family:inherit;transition:border-color .15s;}
+.fi:focus{outline:none;border-color:var(--accent);}
+select.fi{cursor:pointer;}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fgrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.span2{grid-column:span 2;}
+.help{font-size:10px;color:var(--muted);margin-top:2px;}
+/* Modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;align-items:center;justify-content:center;}
+.overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:520px;max-width:95vw;max-height:88vh;overflow-y:auto;}
+.modal-lg{width:680px;}
+.mh{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--border);}
+.mt{font-size:14px;font-weight:700;}
+.mb{padding:18px 20px;}
+.mf{padding:13px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1;padding:0;}
+.close:hover{color:var(--text);}
+/* Stat rows */
+.sr{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.sr:last-child{border-bottom:none;}
+.sl{color:var(--muted);}
+.sv{font-weight:600;}
+/* Tags */
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;}
+.tg{background:rgba(63,185,80,.15);color:var(--green);}
+.tr{background:rgba(248,81,73,.15);color:var(--red);}
+.tb{background:rgba(88,166,255,.15);color:var(--blue);}
+.ty{background:rgba(227,179,65,.15);color:var(--yellow);}
+/* Colors */
+.pos{color:var(--green);}
+.neg{color:var(--red);}
+.neu{color:var(--text);}
+/* Misc */
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.stitle{font-size:14px;font-weight:700;}
+.sep{height:1px;background:var(--border);margin:18px 0;}
+.alert{padding:9px 13px;border-radius:6px;font-size:12px;margin-bottom:12px;}
+.ai{background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);color:var(--blue);}
+.aw{background:rgba(227,179,65,.1);border:1px solid rgba(227,179,65,.3);color:var(--yellow);}
+.ag{background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);color:var(--green);}
+.empty{text-align:center;padding:50px 20px;color:var(--muted);}
+.ei{font-size:32px;margin-bottom:10px;}
+.etitle{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.tabs2{display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--border);}
+.tab2{padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;}
+.tab2:hover{color:var(--text);}
+.tab2.active{color:var(--accent);border-bottom-color:var(--accent);}
+.prog{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:8px;}
+.progf{height:100%;border-radius:3px;transition:width .3s;}
+.preview-box{background:var(--surface2);border-radius:6px;padding:11px 13px;margin-top:10px;font-size:12px;}
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;font-size:13px;color:var(--muted);flex-direction:column;gap:10px;}
+.spin{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spin"></div>데이터 불러오는 중...</div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="logo">
+    <h1>🚀 쿠팡 순수익</h1>
+    <p>Rocket Growth 관리 시스템</p>
+  </div>
+  <div class="nav">
+    <div class="nav-item active" data-page="dashboard"><span class="nav-icon">🏠</span>대시보드</div>
+    <div class="nav-item" data-page="products"><span class="nav-icon">📦</span>상품 관리</div>
+    <div class="nav-item" data-page="inventory"><span class="nav-icon">🏭</span>재고 / 정산</div>
+    <div class="nav-item" data-page="costs"><span class="nav-icon">💸</span>투자 비용</div>
+    <div class="nav-item" data-page="analysis"><span class="nav-icon">📊</span>분석</div>
+    <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span>설정 / 백업</div>
+  </div>
+  <div class="sidebar-footer">
+    <div id="sdate"></div>
+    <div style="margin-top:3px;">IndexedDB 자동저장</div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="header">
+    <div class="h-title" id="htitle">대시보드</div>
+    <div class="h-actions">
+      <button id="theme-toggle" onclick="toggleTheme()" title="라이트/다크 모드 전환">🌙</button>
+      <button class="btn btn-ghost" onclick="gsSave()" title="구글 시트에 저장">☁️ 시트 저장</button>
+      <button class="btn btn-ghost" onclick="exportJSON()">💾 백업</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('impFile').click()">📂 복원</button>
+      <input type="file" id="impFile" accept=".json" style="display:none" onchange="importJSON(this)">
+    </div>
+  </div>
+  <div id="content"></div>
+</div>
+
+<!-- MODAL: PRODUCT -->
+<div class="overlay" id="m-product">
+  <div class="modal modal-lg">
+    <div class="mh"><span class="mt" id="m-product-title">상품 등록</span><button class="close" onclick="closeModal('m-product')">×</button></div>
+    <div class="mb" id="m-product-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal('m-product')">취소</button>
+      <button class="btn btn-primary" onclick="saveProduct()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: SALE -->
+<div class="overlay" id="m-sale">
+  <div class="modal">
+    <div class="mh"><span class="mt">판매 입력</span><button class="close" onclick="closeModal('m-sale')">×</button></div>
+    <div class="mb" id="m-sale-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal('m-sale')">취소</button>
+      <button class="btn btn-primary" onclick="saveSale()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: COST -->
+<div class="overlay" id="m-cost">
+  <div class="modal">
+    <div class="mh"><span class="mt" id="m-cost-title">비용 추가</span><button class="close" onclick="closeModal('m-cost')">×</button></div>
+    <div class="mb" id="m-cost-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal('m-cost')">취소</button>
+      <button class="btn btn-primary" id="m-cost-save" onclick="saveCost()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: GOAL -->
+<div class="overlay" id="m-goal">
+  <div class="modal">
+    <div class="mh"><span class="mt">목표 설정</span><button class="close" onclick="closeModal('m-goal')">×</button></div>
+    <div class="mb" id="m-goal-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal('m-goal')">취소</button>
+      <button class="btn btn-primary" onclick="saveGoal()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== DB =====================
+let db, currentPage = 'dashboard', editProdId = null, saleProdId = null, editCostId = null, costMode = 'base';
+
+let D = {
+  products: [],  // {id,name,category,feeRate,sellingPrice,purchasePrice,logisticsCost,packagingCost,otherCostPerUnit,settlementDays,note}
+  sales: [],     // {id,productId,date,qty,returnQty,sellingPrice,adCost,adSales,note}
+  stock: [],     // {id,productId,date,qty,note}
+  baseCosts: [], // {id,name,amount,isMonthly,startDate,isLoan,interestRate,note}
+  extraCosts: [],// {id,name,amount,date,category,linkedProductId,note}
+  goals: {monthlyTarget:0,totalTarget:0,startDate:''},
+  settings: {vatRegistered:true, cnyRate:310, marginTarget:40}
+};
+
+async function initDB() {
+  return new Promise((res,rej) => {
+    const r = indexedDB.open('coupang_v1', 1);
+    r.onupgradeneeded = e => { if(!e.target.result.objectStoreNames.contains('kv')) e.target.result.createObjectStore('kv',{keyPath:'k'}); };
+    r.onsuccess = e => { db = e.target.result; res(); };
+    r.onerror = rej;
+  });
+}
+async function dbSave() {
+  return new Promise(res => {
+    const tx = db.transaction('kv','readwrite');
+    tx.objectStore('kv').put({k:'data',v:D});
+    tx.oncomplete = res;
+  });
+}
+async function dbLoad() {
+  return new Promise(res => {
+    const tx = db.transaction('kv','readonly');
+    const r = tx.objectStore('kv').get('data');
+    r.onsuccess = e => { if(e.target.result) D = {...D,...e.target.result.v}; res(); };
+    r.onerror = () => res();
+  });
+}
+
+// ===================== UTILS =====================
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
+const fmt = n => Math.round(n||0).toLocaleString('ko-KR');
+const fmtf = (n,d=1) => Number(n||0).toFixed(d);
+const nc = n => n > 0 ? 'pos' : n < 0 ? 'neg' : 'neu';
+const getProd = id => D.products.find(p => p.id === id);
+const today = () => new Date().toISOString().split('T')[0];
+
+const FEES = {'패션의류/잡화':10.8,'뷰티/헬스':10.8,'생활/주방':10.8,'식품':10.8,'스포츠/레저':10.8,'완구/취미':10.8,'가전/디지털':6.5,'컴퓨터/주변기기':6.5,'도서/음반':8.0,'반려동물':10.8,'기타':10.8};
+
+const getCnyRate = () => D.settings?.cnyRate || 310;
+const getMarginTarget = () => D.settings?.marginTarget || 40;
+
+// 엔드 ROAS: 판매가/마진 × 1.1 (광고비에도 VAT 붙으니까) — % 단위 반환
+function calcEndRoas(p) {
+  const up = unitProfit(p);
+  return up > 0 ? (p.sellingPrice / up) * 1.1 * 100 : null;
+}
+// 원가 상한선: 목표 마진율 기준 최대 허용 사입단가
+// 마진 = sp - (수수료+물류)×1.1 - 원가 ≥ sp×targetMargin/100
+// 원가 ≤ sp - (수수료+물류)×1.1 - sp×targetMargin/100
+function calcCostCeiling(p, targetMargin) {
+  const sp = p.sellingPrice || 0;
+  const feeAmt = sp * (p.feeRate||0) / 100;
+  const logistics = (p.logisticsCost||0) + (p.deliveryCost||0);
+  return sp - (feeAmt + logistics) * 1.1 - sp * targetMargin / 100;
+}
+
+// 쿠팡 비용(수수료+입출고비+배송비)에 VAT 1.1 포함 — 돈크라테스 공식 기준
+function unitProfit(p, sp) {
+  sp = sp || p.sellingPrice || 0;
+  const feeAmt = sp * (p.feeRate||0) / 100;
+  const logistics = (p.logisticsCost||0) + (p.deliveryCost||0);
+  const coupangCost = (feeAmt + logistics) * 1.1;  // 쿠팡 비용 VAT 포함
+  return sp - coupangCost - (p.purchasePrice||0);
+}
+function saleProfit(s) {
+  const p = getProd(s.productId); if(!p) return 0;
+  const sp = s.sellingPrice || p.sellingPrice || 0;
+  const netQ = (s.qty||0) - (s.returnQty||0);
+  const feeAmt = sp * (p.feeRate||0) / 100;
+  const logistics = (p.logisticsCost||0) + (p.deliveryCost||0);
+  const coupangCost = (feeAmt + logistics) * 1.1;
+  const marginPerUnit = sp - coupangCost - (p.purchasePrice||0);
+  return marginPerUnit * netQ - (s.adCost||0);
+}
+function saleRevenue(s) {
+  const p = getProd(s.productId); if(!p) return 0;
+  const sp = s.sellingPrice || p.sellingPrice || 0;
+  return sp * ((s.qty||0) - (s.returnQty||0));
+}
+function settleDate(s) {
+  const p = getProd(s.productId);
+  const d = new Date(s.date);
+  d.setDate(d.getDate() + (p?.settlementDays||14));
+  return d;
+}
+function stockLevel(pid) {
+  const bought = D.stock.filter(s=>s.productId===pid&&s.type!=='disposal').reduce((a,s)=>a+(s.qty||0),0);
+  const sold = D.sales.filter(s=>s.productId===pid).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);
+  const disposed = D.stock.filter(s=>s.productId===pid&&s.type==='disposal').reduce((a,s)=>a+(s.qty||0),0);
+  return bought - sold - disposed;
+}
+function totalInvested() {
+  const now = new Date();
+  let t = 0;
+  D.baseCosts.forEach(c => {
+    if(c.isMonthly) {
+      const s = new Date(c.startDate||now);
+      const mo = Math.max(1, Math.floor((now-s)/(1000*60*60*24*30))+1);
+      t += (c.amount||0) * mo;
+      if(c.isLoan) t += (c.amount||0) * (c.interestRate||0)/100/12 * mo;
+    } else t += (c.amount||0);
+  });
+  D.extraCosts.forEach(c => t += (c.amount||0));
+  return t;
+}
+function totalProfit() { return D.sales.reduce((a,s)=>a+saleProfit(s),0); }
+function monthProfit(y,mo) { return D.sales.filter(s=>{const d=new Date(s.date);return d.getFullYear()===y&&d.getMonth()===mo;}).reduce((a,s)=>a+saleProfit(s),0); }
+function pendingSettlement() {
+  const now = new Date();
+  return D.sales.filter(s=>settleDate(s)>now).reduce((a,s)=>a+saleRevenue(s),0);
+}
+function calcVAT() {
+  const st = D.sales.reduce((a,s)=>a+saleRevenue(s)*10/110,0);
+  const pt = D.sales.reduce((a,s)=>{const p=getProd(s.productId);if(!p)return a;return a+(p.purchasePrice||0)*((s.qty||0)-(s.returnQty||0))*10/110;},0);
+  return {st,pt,net:st-pt};
+}
+function monthlyData() {
+  const now = new Date(), r = [];
+  for(let i=5;i>=0;i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    r.push({label:`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}`, profit:monthProfit(d.getFullYear(),d.getMonth()), y:d.getFullYear(), mo:d.getMonth()});
+  }
+  return r;
+}
+function weeklyData() {
+  const now = new Date(), r = [];
+  for(let i=7;i>=0;i--) {
+    const end = new Date(now); end.setDate(end.getDate()-i*7);
+    const start = new Date(end); start.setDate(start.getDate()-6);
+    const p = D.sales.filter(s=>{const d=new Date(s.date);return d>=start&&d<=end;}).reduce((a,s)=>a+saleProfit(s),0);
+    r.push({label:`${start.getMonth()+1}/${start.getDate()}`,profit:p});
+  }
+  return r;
+}
+
+// ===================== NAVIGATION =====================
+const pageTitles = {dashboard:'대시보드',products:'상품 관리',inventory:'재고 / 정산',costs:'투자 비용',analysis:'분석',settings:'설정 / 백업'};
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
+  document.getElementById('htitle').textContent = pageTitles[page];
+  renderPage(page);
+}
+function renderPage(page) {
+  const c = document.getElementById('content');
+  const renders = {dashboard:renderDashboard,products:renderProducts,inventory:renderInventory,costs:renderCosts,analysis:renderAnalysis,settings:renderSettings};
+  c.innerHTML = renders[page]();
+  if(page==='dashboard') setTimeout(initDashChart,50);
+}
+
+// ===================== DASHBOARD =====================
+function renderDashboard() {
+  const now = new Date();
+  const tp = totalProfit(), ti = totalInvested(), net = tp - ti;
+  const mop = monthProfit(now.getFullYear(), now.getMonth());
+  const lmp = monthProfit(now.getFullYear(), now.getMonth()-1);
+  const pend = pendingSettlement();
+  const goal = D.goals.monthlyTarget || 0;
+  const pct = goal > 0 ? Math.min(100, mop/goal*100) : 0;
+  const MO = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+  return `
+  <div class="g4" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="c-title">이번달 순수익</div>
+      <div class="c-value ${nc(mop)}">${mop<0?'-':''}₩${fmt(Math.abs(mop))}</div>
+      <div class="c-sub">${MO[now.getMonth()]} 기준</div>
+    </div>
+    <div class="card">
+      <div class="c-title">누적 총 순수익</div>
+      <div class="c-value ${nc(tp)}">${tp<0?'-':''}₩${fmt(Math.abs(tp))}</div>
+      <div class="c-sub">전체 기간 합계</div>
+    </div>
+    <div class="card">
+      <div class="c-title">총 투자비용</div>
+      <div class="c-value" style="color:var(--yellow)">₩${fmt(ti)}</div>
+      <div class="c-sub">기본 + 추가 합산</div>
+    </div>
+    <div class="card">
+      <div class="c-title">정산 대기액</div>
+      <div class="c-value" style="color:var(--blue)">₩${fmt(pend)}</div>
+      <div class="c-sub">미입금 예정 금액</div>
+    </div>
+  </div>
+
+  <div class="g2" style="margin-bottom:16px;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div><div class="c-title" style="margin-bottom:2px;">💀 빚 트래커</div><div style="font-size:10px;color:var(--muted);">진짜 흑자까지</div></div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:-1px;" class="${net<0?'neg':'pos'}">${net<0?'-':'+'}₩${fmt(Math.abs(net))}</div>
+      </div>
+      <div class="sr"><span class="sl">누적 순수익</span><span class="sv ${nc(tp)}">₩${fmt(tp)}</span></div>
+      <div class="sr"><span class="sl">총 투자비용</span><span class="sv neg">-₩${fmt(ti)}</span></div>
+      <div class="sr"><span class="sl">현재 포지션</span><span class="sv ${nc(net)}">${net<0?'적자 ▼':'흑자 ▲'}</span></div>
+      ${net<0
+        ? `<div class="alert aw" style="margin:12px 0 0;font-size:11px;">아직 <strong>₩${fmt(Math.abs(net))}</strong> 더 벌어야 진정한 흑자입니다</div>`
+        : `<div class="alert ag" style="margin:12px 0 0;font-size:11px;">🎉 흑자 달성! 순이익 <strong>₩${fmt(net)}</strong></div>`
+      }
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div class="c-title">🎯 이번달 목표</div>
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;" onclick="openGoalModal()">목표 설정</button>
+      </div>
+      ${goal>0 ? `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:20px;font-weight:800;" class="${nc(mop)}">${mop<0?'-':''}₩${fmt(Math.abs(mop))}</span>
+            <span style="font-size:12px;color:var(--muted);">/ ₩${fmt(goal)}</span>
+          </div>
+          <div class="prog" style="margin-top:8px;height:7px;">
+            <div class="progf" style="width:${pct}%;background:${pct>=100?'var(--green)':'var(--accent)'};"></div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:5px;">${fmtf(pct)}% 달성 · 남은 금액 ₩${fmt(Math.max(0,goal-mop))}</div>
+        </div>
+        <div class="sr"><span class="sl">지난달</span><span class="sv ${nc(lmp)}">${lmp<0?'-':''}₩${fmt(Math.abs(lmp))}</span></div>
+        <div class="sr"><span class="sl">전월 대비</span><span class="sv ${nc(mop-lmp)}">${mop-lmp>=0?'+':'-'}₩${fmt(Math.abs(mop-lmp))}</span></div>
+      ` : `
+        <div class="empty" style="padding:24px 0;">
+          <div class="ei">🎯</div>
+          <div class="etitle">목표를 설정해보세요</div>
+          <button class="btn btn-primary" style="margin-top:10px;" onclick="openGoalModal()">목표 설정</button>
+        </div>
+      `}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="c-title" style="margin-bottom:12px;">월별 순수익 추이 (최근 6개월)</div>
+    <div style="height:180px;"><canvas id="ch-dash"></canvas></div>
+  </div>`;
+}
+
+// ===================== PRODUCTS =====================
+let saleFilterPid = '';
+function renderProducts() {
+  const prods = D.products;
+  const now = new Date();
+  return `
+  <div class="sh">
+    <div class="stitle">상품 관리</div>
+    <button class="btn btn-primary" onclick="openProdModal()">+ 상품 등록</button>
+  </div>
+  ${prods.length===0 ? `
+    <div class="card"><div class="empty"><div class="ei">📦</div><div class="etitle">등록된 상품이 없습니다</div><div style="font-size:11px;">첫 상품을 등록해 순수익을 계산해보세요</div><button class="btn btn-primary" style="margin-top:14px;" onclick="openProdModal()">상품 등록하기</button></div></div>
+  ` : `
+  <div class="card" style="padding:0;margin-bottom:18px;">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>상품명</th><th>카테고리</th><th>사이즈</th><th>판매가</th><th>사입단가</th><th>수수료</th>
+          <th>단위마진</th><th>마진율</th><th>원가상한선</th><th>엔드ROAS</th><th>재고</th><th>이번달순수익</th><th>관리</th>
+        </tr></thead>
+        <tbody>
+        ${prods.map(p => {
+          const up = unitProfit(p);
+          const sp = p.sellingPrice||0;
+          const margin = sp>0 ? up/sp*100 : 0;
+          const stk = stockLevel(p.id);
+          const mSales = D.sales.filter(s=>s.productId===p.id && new Date(s.date).getMonth()===now.getMonth() && new Date(s.date).getFullYear()===now.getFullYear());
+          const mp = mSales.reduce((a,s)=>a+saleProfit(s),0);
+          return `<tr>
+            <td><strong style="font-size:12px;">${p.name}</strong>${p.note?`<div style="font-size:10px;color:var(--muted);">${p.note}</div>`:''}</td>
+            <td><span class="tag tb">${p.category||'-'}</span></td>
+            <td>${p.sizeCategory?`<span class="tag ty">${p.sizeCategory}</span>`:'-'}</td>
+            <td>₩${fmt(sp)}</td>
+            <td>₩${fmt(p.purchasePrice)}${p.cnyPrice?`<div style="font-size:9px;color:var(--muted);">¥${p.cnyPrice}</div>`:''}</td>
+            <td>${p.feeRate}%</td>
+            <td class="${nc(up)}">₩${fmt(up)}</td>
+            <td class="${nc(margin)}">${fmtf(margin)}%${margin>=getMarginTarget()?'':' ⚠️'}</td>
+            <td style="font-size:11px;">
+              ${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0)+(p.logisticsCost||0)+(p.deliveryCost||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)}<br><span style="font-size:9px;">${ok?'✅ 여유 ₩'+fmt(c-cur):'❌ 초과 ₩'+fmt(cur-c)}</span></span>`;})()}
+            </td>
+            <td style="font-size:12px;font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er*100)+'%':'-';})()}</td>
+            <td class="${stk<0?'neg':stk<20?'neg':''}">${stk}개${stk<0?' ⚠️':stk<20?' ⚠️':''}</td>
+            <td class="${nc(mp)}">${mp<0?'-':''}₩${fmt(Math.abs(mp))}</td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-primary btn-sm" onclick="openSaleModal('${p.id}')">판매입력</button>
+                <button class="btn btn-ghost btn-sm" onclick="openProdModal('${p.id}')">수정</button>
+                <button class="btn btn-danger btn-sm" onclick="delProd('${p.id}')">삭제</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sh">
+    <div class="stitle">판매 내역</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select class="fi" style="width:auto;font-size:12px;" id="sf-prod" onchange="saleFilterPid=this.value;renderPage('products')">
+        <option value="">전체 상품</option>
+        ${prods.map(p=>`<option value="${p.id}" ${p.id===saleFilterPid?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+      <button class="btn btn-ghost" onclick="exportCSV()">CSV 내보내기</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0;">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>날짜</th><th>상품</th><th>판매가</th><th>판매</th><th>반품</th>
+          <th>매출</th><th>광고비</th><th>ROAS</th><th>순수익</th><th>정산예정</th><th>삭제</th>
+        </tr></thead>
+        <tbody>
+        ${(() => {
+          const filtered = D.sales.filter(s=>!saleFilterPid||s.productId===saleFilterPid).sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,200);
+          if(!filtered.length) return '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px;">판매 내역이 없습니다</td></tr>';
+          return filtered.map(s => {
+            const p = getProd(s.productId);
+            const rev = saleRevenue(s);
+            const prof = saleProfit(s);
+            const roas = s.adCost>0 ? ((s.adSales||0)/s.adCost*100).toFixed(1)+'%' : '-';
+            const sd = settleDate(s);
+            const settled = sd <= new Date();
+            return `<tr>
+              <td>${s.date}</td>
+              <td>${p?.name||'-'}</td>
+              <td>₩${fmt(s.sellingPrice||p?.sellingPrice||0)}</td>
+              <td>${s.qty}</td>
+              <td>${s.returnQty||0}</td>
+              <td>₩${fmt(rev)}</td>
+              <td>${s.adCost?'₩'+fmt(s.adCost):'-'}</td>
+              <td>${roas}</td>
+              <td class="${nc(prof)}">₩${fmt(prof)}</td>
+              <td><span class="tag ${settled?'tg':'ty'}">${settled?'정산완료':sd.toLocaleDateString('ko-KR')}</span></td>
+              <td><button class="btn btn-danger btn-sm" onclick="delSale('${s.id}')">삭제</button></td>
+            </tr>`;
+          }).join('');
+        })()}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `}`;
+}
+
+// ===================== INVENTORY =====================
+function renderInventory() {
+  const now = new Date();
+  return `
+  <div class="sh"><div class="stitle">재고 현황</div></div>
+  ${D.products.length===0 ? `<div class="card"><div class="empty"><div class="ei">🏭</div><div class="etitle">등록된 상품이 없습니다</div></div></div>` : `
+  <div class="card" style="padding:0;margin-bottom:18px;">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>상품명</th><th>사입(누적)</th><th>판매</th><th>반품</th><th>폐기</th>
+          <th>현재 재고</th><th>일평균 판매</th><th>소진 예상일</th><th>관리</th>
+        </tr></thead>
+        <tbody>
+        ${D.products.map(p => {
+          const bought = D.stock.filter(s=>s.productId===p.id&&s.type!=='disposal').reduce((a,s)=>a+(s.qty||0),0);
+          const sold = D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.qty||0),0);
+          const ret = D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.returnQty||0),0);
+          const disposed = D.stock.filter(s=>s.productId===p.id&&s.type==='disposal').reduce((a,s)=>a+(s.qty||0),0);
+          const stk = bought - sold + ret - disposed;
+          const d30 = new Date(); d30.setDate(d30.getDate()-30);
+          const r30 = D.sales.filter(s=>s.productId===p.id&&new Date(s.date)>=d30).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);
+          const avg = r30/30;
+          const dl = avg>0 ? Math.floor(stk/avg) : null;
+          const deplDate = dl!==null ? new Date(now.getTime()+dl*86400000) : null;
+          return `<tr>
+            <td><strong>${p.name}</strong></td>
+            <td>${fmt(bought)}개</td>
+            <td>${fmt(sold)}개</td>
+            <td>${fmt(ret)}개</td>
+            <td class="${disposed>0?'neg':''}">${disposed>0?disposed+'개':'-'}</td>
+            <td class="${stk<0?'neg':stk<20?'neg':''}">${stk}개${stk<0?' ⚠️ 마이너스':stk<20?' ⚠️ 부족':''}</td>
+            <td>${avg>0?fmtf(avg,1)+'개':'-'}</td>
+            <td>${deplDate?`<span class="tag ${dl<14?'tr':'ty'}">${deplDate.toLocaleDateString('ko-KR')} (~${dl}일)</span>`:'-'}</td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-ghost btn-sm" onclick="openStockModal('${p.id}')">+ 사입</button>
+                <button class="btn btn-sm" style="background:transparent;border:1px solid var(--yellow);color:var(--yellow);" onclick="openDisposalModal('${p.id}')">🗑 폐기</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sh" style="margin-top:4px;">
+    <div class="stitle">사입 / 폐기 내역</div>
+  </div>
+  <div class="card" style="padding:0;margin-bottom:18px;">
+    ${D.stock.length===0 ? '<div class="empty" style="padding:24px;"><div class="etitle">사입 내역이 없습니다</div></div>' : `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>날짜</th><th>상품명</th><th>구분</th><th>수량</th><th>메모</th><th>관리</th>
+        </tr></thead>
+        <tbody>
+        ${D.stock.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+          const p=getProd(s.productId);
+          const isDisposal=s.type==='disposal';
+          return `<tr>
+            <td>${s.date||'-'}</td>
+            <td>${p?.name||'-'}</td>
+            <td><span class="tag ${isDisposal?'tr':'tg'}">${isDisposal?'🗑 폐기':'📦 사입'}</span></td>
+            <td class="${isDisposal?'neg':''}">${isDisposal?'-':''}${s.qty}개</td>
+            <td style="color:var(--muted);font-size:11px;">${s.note||'-'}</td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-ghost btn-sm" onclick="openStockEditModal('${s.id}')">수정</button>
+                <button class="btn btn-danger btn-sm" onclick="delStock('${s.id}')">삭제</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>
+  <div class="sh" style="margin-top:4px;"><div class="stitle">정산 예정 내역</div></div>
+  <div class="card" style="padding:0;">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>상품</th><th>판매일</th><th>정산 예정일</th><th>D-day</th><th>정산 예정액</th><th>상태</th></tr></thead>
+        <tbody>
+        ${(() => {
+          const rows = D.sales.map(s=>({s,due:settleDate(s)})).sort((a,b)=>a.due-b.due).slice(0,60);
+          if(!rows.length) return '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">판매 내역이 없습니다</td></tr>';
+          return rows.map(({s,due})=>{
+            const p = getProd(s.productId);
+            const amt = saleRevenue(s);
+            const diff = Math.ceil((due-new Date())/86400000);
+            const settled = due<=new Date();
+            return `<tr>
+              <td>${p?.name||'-'}</td>
+              <td>${s.date}</td>
+              <td>${due.toLocaleDateString('ko-KR')}</td>
+              <td>${settled?'<span class="tag tg">완료</span>':`D-${diff}`}</td>
+              <td>₩${fmt(amt)}</td>
+              <td><span class="tag ${settled?'tg':diff<=3?'tr':'ty'}">${settled?'정산완료':diff<=3?'입금임박':'대기중'}</span></td>
+            </tr>`;
+          }).join('');
+        })()}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `}`;
+}
+
+// ===================== COSTS =====================
+function renderCosts() {
+  const now = new Date();
+  const tb = D.baseCosts.reduce((a,c)=>{
+    if(c.isMonthly){const s=new Date(c.startDate||now);const mo=Math.max(1,Math.floor((now-s)/(1000*60*60*24*30))+1);return a+(c.amount||0)*mo;}
+    return a+(c.amount||0);
+  },0);
+  const te = D.extraCosts.reduce((a,c)=>a+(c.amount||0),0);
+  return `
+  <div class="g3" style="margin-bottom:16px;">
+    <div class="card"><div class="c-title">기본 투자비용</div><div class="c-value" style="color:var(--yellow)">₩${fmt(tb)}</div><div class="c-sub">${D.baseCosts.length}개 항목 (누적)</div></div>
+    <div class="card"><div class="c-title">추가 투자비용</div><div class="c-value" style="color:var(--yellow)">₩${fmt(te)}</div><div class="c-sub">${D.extraCosts.length}개 항목</div></div>
+    <div class="card"><div class="c-title">총 투자비용</div><div class="c-value neg">₩${fmt(tb+te)}</div><div class="c-sub">전체 합산</div></div>
+  </div>
+
+  <div class="sh"><div class="stitle">기본 투자비용</div><button class="btn btn-primary" onclick="openCostModal('base')">+ 추가</button></div>
+  <div class="card" style="padding:0;margin-bottom:18px;">
+    ${D.baseCosts.length===0 ? '<div class="empty" style="padding:30px;"><div class="etitle">구독료, 대출금, 이자 등</div></div>' : `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>항목명</th><th>금액</th><th>유형</th><th>시작일</th><th>대출이자율</th><th>누적금액</th><th>관리</th></tr></thead>
+        <tbody>
+        ${D.baseCosts.map(c=>{
+          const s=new Date(c.startDate||now);
+          const mo=Math.max(1,Math.floor((now-s)/(1000*60*60*24*30))+1);
+          const acc=c.isMonthly?(c.amount||0)*mo:(c.amount||0);
+          return `<tr>
+            <td><strong>${c.name}</strong>${c.note?`<div style="font-size:10px;color:var(--muted);">${c.note}</div>`:''}</td>
+            <td>₩${fmt(c.amount)}</td>
+            <td><span class="tag ${c.isMonthly?'tb':'ty'}">${c.isMonthly?'월정액':'일회성'}</span></td>
+            <td>${c.startDate||'-'}</td>
+            <td>${c.isLoan?(c.interestRate||0)+'%':'-'}</td>
+            <td class="neg">₩${fmt(acc)}</td>
+            <td><div style="display:flex;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="openCostModal('base','${c.id}')">수정</button><button class="btn btn-danger btn-sm" onclick="delCost('base','${c.id}')">삭제</button></div></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>
+
+  <div class="sh"><div class="stitle">추가 투자비용</div><button class="btn btn-primary" onclick="openCostModal('extra')">+ 추가</button></div>
+  <div class="card" style="padding:0;">
+    ${D.extraCosts.length===0 ? '<div class="empty" style="padding:30px;"><div class="etitle">포장비, 마케팅, 광고비, 기타 비용</div></div>' : `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>항목명</th><th>카테고리</th><th>금액</th><th>날짜</th><th>연결 상품</th><th>관리</th></tr></thead>
+        <tbody>
+        ${D.extraCosts.map(c=>{
+          const lp = c.linkedProductId ? getProd(c.linkedProductId) : null;
+          return `<tr>
+            <td><strong>${c.name}</strong>${c.note?`<div style="font-size:10px;color:var(--muted);">${c.note}</div>`:''}</td>
+            <td><span class="tag tb">${c.category||'-'}</span></td>
+            <td class="neg">₩${fmt(c.amount)}</td>
+            <td>${c.date||'-'}</td>
+            <td>${lp?lp.name:'-'}</td>
+            <td><div style="display:flex;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="openCostModal('extra','${c.id}')">수정</button><button class="btn btn-danger btn-sm" onclick="delCost('extra','${c.id}')">삭제</button></div></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>`;
+}
+
+// ===================== ANALYSIS =====================
+function renderAnalysis() {
+  return `
+  <div class="tabs2">
+    <div class="tab2 active" onclick="switchTab('an-profit',this)">수익 추이</div>
+    <div class="tab2" onclick="switchTab('an-prod',this)">상품별 분석</div>
+    <div class="tab2" onclick="switchTab('an-bep',this)">BEP 분석</div>
+    <div class="tab2" onclick="switchTab('an-vat',this)">부가세</div>
+  </div>
+
+  <div id="an-profit">
+    <div class="g2" style="margin-bottom:16px;">
+      <div class="card"><div class="c-title" style="margin-bottom:10px;">월별 순수익 (6개월)</div><div style="height:190px;"><canvas id="ch-monthly"></canvas></div></div>
+      <div class="card"><div class="c-title" style="margin-bottom:10px;">주간 순수익 (8주)</div><div style="height:190px;"><canvas id="ch-weekly"></canvas></div></div>
+    </div>
+    <div class="card" style="padding:0;">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>월</th><th>순수익</th><th>매출액</th><th>판매건수</th><th>목표달성률</th></tr></thead>
+          <tbody>
+          ${monthlyData().map(m=>{
+            const rev = D.sales.filter(s=>{const d=new Date(s.date);return d.getFullYear()===m.y&&d.getMonth()===m.mo;}).reduce((a,s)=>a+saleRevenue(s),0);
+            const cnt = D.sales.filter(s=>{const d=new Date(s.date);return d.getFullYear()===m.y&&d.getMonth()===m.mo;}).length;
+            const g = D.goals.monthlyTarget||0;
+            const pct = g>0 ? fmtf(m.profit/g*100)+'%' : '-';
+            return `<tr><td>${m.label}</td><td class="${nc(m.profit)}">${m.profit<0?'-':''}₩${fmt(Math.abs(m.profit))}</td><td>₩${fmt(rev)}</td><td>${cnt}건</td><td>${pct}</td></tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="an-prod" style="display:none;">
+    ${D.products.length===0 ? '<div class="card"><div class="empty"><div class="etitle">상품을 먼저 등록하세요</div></div></div>' : `
+    <div class="card" style="padding:0;margin-bottom:16px;">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>상품명</th><th>판매가</th><th>단위마진</th><th>마진율</th><th>원가상한선</th><th>엔드ROAS</th><th>총 판매수</th><th>총 매출</th><th>총 순수익</th><th>총 광고비</th><th>실측ROAS</th></tr></thead>
+          <tbody>
+          ${D.products.map(p=>{
+            const up=unitProfit(p);
+            const sp=p.sellingPrice||0;
+            const mg=sp>0?up/sp*100:0;
+            const ps=D.sales.filter(s=>s.productId===p.id);
+            const qty=ps.reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);
+            const rev=ps.reduce((a,s)=>a+saleRevenue(s),0);
+            const prof=ps.reduce((a,s)=>a+saleProfit(s),0);
+            const adcost=ps.reduce((a,s)=>a+(s.adCost||0),0);
+            const adsal=ps.reduce((a,s)=>a+(s.adSales||0),0);
+            const roas=adcost>0?(adsal/adcost*100).toFixed(1)+'%':'-';
+            return `<tr>
+              <td><strong>${p.name}</strong></td><td>₩${fmt(sp)}</td>
+              <td class="${nc(up)}">₩${fmt(up)}</td><td class="${nc(mg)}">${fmtf(mg)}%${mg>=getMarginTarget()?'':' ⚠️'}</td>
+              <td style="font-size:11px;">${(()=>{const c=calcCostCeiling(p,getMarginTarget());const cur=(p.purchasePrice||0)+(p.logisticsCost||0)+(p.deliveryCost||0);const ok=cur<=c;return `<span class="${ok?'pos':'neg'}">₩${fmt(c)} ${ok?'✅':'❌'}</span>`;})()}</td>
+              <td style="font-weight:700;color:var(--blue);">${(()=>{const er=calcEndRoas(p);return er?Math.round(er*100)+'%':'-';})()}</td>
+              <td>${fmt(qty)}</td><td>₩${fmt(rev)}</td>
+              <td class="${nc(prof)}">${prof<0?'-':''}₩${fmt(Math.abs(prof))}</td>
+              <td>${adcost?'₩'+fmt(adcost):'-'}</td><td>${roas}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card"><div class="c-title" style="margin-bottom:10px;">상품별 총 순수익 비교</div><div style="height:220px;"><canvas id="ch-prods"></canvas></div></div>`}
+  </div>
+
+  <div id="an-bep" style="display:none;">
+    ${D.products.length===0 ? '<div class="card"><div class="empty"><div class="etitle">상품을 먼저 등록하세요</div></div></div>' : `
+    <div class="alert ai">BEP(손익분기)는 상품별 연결된 추가투자비용 기준입니다. 기본투자비용은 사업 전체 BEP에 포함됩니다.</div>
+    <div class="card" style="padding:0;">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>상품명</th><th>판매가</th><th>단위변동비</th><th>단위공헌이익</th><th>공헌이익률</th><th>연결비용</th><th>BEP수량</th><th>광고포함BEP</th><th>현재판매</th><th>달성여부</th></tr></thead>
+          <tbody>
+          ${D.products.map(p=>{
+            const sp=p.sellingPrice||0;
+            const feeAmt2=sp*(p.feeRate||0)/100;
+            const logistics2=(p.logisticsCost||0)+(p.deliveryCost||0);
+            const coupangCost2=(feeAmt2+logistics2)*1.1;
+            const cm=sp-coupangCost2-(p.purchasePrice||0);
+            const cmr=sp>0?cm/sp*100:0;
+            const linked=D.extraCosts.filter(c=>c.linkedProductId===p.id).reduce((a,c)=>a+(c.amount||0),0);
+            const bep=cm>0?Math.ceil(linked/cm):'∞';
+            const adtot=D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.adCost||0),0);
+            const bepAd=cm>0?Math.ceil((linked+adtot)/cm):'∞';
+            const sold=D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);
+            const reached=typeof bep==='number'&&sold>=bep;
+            return `<tr>
+              <td><strong>${p.name}</strong></td><td>₩${fmt(sp)}</td><td>₩${fmt(coupangCost2)}</td>
+              <td class="${nc(cm)}">₩${fmt(cm)}</td><td class="${nc(cmr)}">${fmtf(cmr)}%</td>
+              <td class="neg">${linked?'₩'+fmt(linked):'-'}</td>
+              <td>${bep==='∞'?'<span class="tag tr">마진없음</span>':bep+'개'}</td>
+              <td>${bepAd==='∞'?'<span class="tag tr">마진없음</span>':bepAd+'개'}</td>
+              <td>${sold}개</td>
+              <td><span class="tag ${reached?'tg':'ty'}">${reached?'✅ BEP 달성':'미달성'}</span></td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`}
+  </div>
+
+  <div id="an-vat" style="display:none;">
+    ${(()=>{
+      const v=calcVAT();
+      return `
+      <div class="g3" style="margin-bottom:16px;">
+        <div class="card"><div class="c-title">매출 세액</div><div class="c-value neg">₩${fmt(v.st)}</div><div class="c-sub">납부해야 할 부가세</div></div>
+        <div class="card"><div class="c-title">매입 세액 (공제)</div><div class="c-value pos">₩${fmt(v.pt)}</div><div class="c-sub">공제받는 부가세</div></div>
+        <div class="card"><div class="c-title">납부 세액 (순)</div><div class="c-value ${nc(-v.net)}">₩${fmt(v.net)}</div><div class="c-sub">매출세 - 매입세</div></div>
+      </div>
+      <div class="card">
+        <div class="c-title" style="margin-bottom:12px;">분기별 부가세 요약</div>
+        <div class="alert ai" style="margin-bottom:12px;">일반과세자 기준 (부가세 10/110). 실제 신고는 세무사와 확인하세요.</div>
+        ${[1,2,3,4].map(q=>{
+          const mos=[(q-1)*3,(q-1)*3+1,(q-1)*3+2];
+          const qs=D.sales.filter(s=>mos.includes(new Date(s.date).getMonth()));
+          const st=qs.reduce((a,s)=>a+saleRevenue(s)*10/110,0);
+          const pt=qs.reduce((a,s)=>{const p=getProd(s.productId);if(!p)return a;return a+(p.purchasePrice||0)*((s.qty||0)-(s.returnQty||0))*10/110;},0);
+          return `<div class="sr"><span class="sl">${q}분기 납부세액</span><span class="sv ${nc(-(st-pt))}">${st-pt<0?'-':''}₩${fmt(Math.abs(st-pt))}</span></div>`;
+        }).join('')}
+      </div>`;
+    })()}
+  </div>`;
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.tab2').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['an-profit','an-prod','an-bep','an-vat'].forEach(t=>{
+    const el2=document.getElementById(t);
+    if(el2) el2.style.display=t===id?'block':'none';
+  });
+  if(id==='an-profit'||id==='an-prod') setTimeout(initAnalysisCharts,50);
+}
+
+// ===================== SETTINGS =====================
+function renderSettings() {
+  const scriptUrl = localStorage.getItem('gsScriptUrl') || '';
+  const lastSync = localStorage.getItem('gsLastSync') || '';
+  return `
+  <!-- 구글 시트 동기화 -->
+  <div class="card" style="margin-bottom:16px;border-color:rgba(88,166,255,.4);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <span style="font-size:18px;">🟢</span>
+      <div class="stitle">구글 시트 동기화</div>
+      ${lastSync ? `<span style="font-size:10px;color:var(--muted);margin-left:auto;">마지막 동기화: ${lastSync}</span>` : ''}
+    </div>
+    <div class="fg">
+      <label class="fl">Apps Script 웹앱 URL</label>
+      <input class="fi" id="gs-url" value="${scriptUrl}" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="help">구글 시트 → 확장 프로그램 → Apps Script → 배포 → 웹앱 URL을 붙여넣으세요</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+      <button class="btn btn-primary" onclick="gsSave()" id="gs-save-btn">
+        <span id="gs-save-icon">☁️</span> 구글 시트에 저장
+      </button>
+      <button class="btn btn-secondary" onclick="gsLoad()" id="gs-load-btn">
+        <span id="gs-load-icon">📥</span> 구글 시트에서 불러오기
+      </button>
+      <button class="btn btn-ghost" onclick="saveGsUrl()">URL 저장</button>
+    </div>
+    ${!scriptUrl ? `<div class="alert aw" style="margin-top:10px;">⚠️ Apps Script URL을 먼저 입력하고 저장하세요. 위 STEP 1~2 안내를 따라 설정하면 됩니다.</div>` : `<div class="alert ag" style="margin-top:10px;">✅ URL이 연결됐습니다. 어느 기기에서든 같은 URL로 데이터를 주고받을 수 있어요.</div>`}
+  </div>
+
+  <div class="g2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="stitle" style="margin-bottom:14px;">💾 로컬 백업 / 복원</div>
+      <div class="alert aw" style="margin-bottom:12px;">브라우저 방문기록 삭제 시 데이터 소실 가능. 정기 백업을 권장합니다.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="exportJSON()">JSON 백업 다운로드</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('impFile').click()">JSON 파일 불러오기</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">CSV 내보내기</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="stitle" style="margin-bottom:14px;">⚙️ 설정</div>
+      <div class="fgrid">
+        <div class="fg">
+          <label class="fl">부가세 사업자 유형</label>
+          <select class="fi" id="vat-type">
+            <option value="1" ${D.settings?.vatRegistered?'selected':''}>일반과세자</option>
+            <option value="0" ${!D.settings?.vatRegistered?'selected':''}>간이과세자</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">위안화 환산율 (원/¥)</label>
+          <input class="fi" id="cny-rate" type="number" value="${D.settings?.cnyRate||310}">
+          <div class="help">위안화 × 환산율 = 원화 사입단가 (기본 310원)</div>
+        </div>
+        <div class="fg span2">
+          <label class="fl">목표 마진율 (%) — 원가 상한선 기준</label>
+          <input class="fi" id="margin-target" type="number" value="${D.settings?.marginTarget||40}" placeholder="40">
+          <div class="help">상품 등록 시 원가 상한선 체크 기준. 기본 40%</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:4px;" onclick="saveSettings()">설정 저장</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px;">
+    <div class="stitle" style="margin-bottom:14px;">📊 데이터 현황</div>
+    <div class="g4">
+      ${[
+        ['📦',D.products.length,'등록 상품'],
+        ['🛒',D.sales.length,'판매 내역'],
+        ['💸',D.baseCosts.length+D.extraCosts.length,'비용 항목'],
+        ['🏭',D.stock.length,'사입 내역'],
+      ].map(([icon,val,label])=>`
+        <div style="text-align:center;padding:14px;background:var(--surface2);border-radius:7px;">
+          <div style="font-size:22px;">${icon}</div>
+          <div style="font-size:22px;font-weight:800;color:var(--accent);margin:4px 0;">${val}</div>
+          <div style="font-size:10px;color:var(--muted);">${label}</div>
+        </div>`).join('')}
+    </div>
+  </div>
+  <div class="card" style="border-color:var(--border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:11px;color:var(--muted);">위험 구역 · 모든 데이터 삭제 (되돌릴 수 없음)</span>
+      <button class="btn btn-sm" style="background:transparent;border:1px solid var(--red);color:var(--red);font-size:10px;padding:3px 9px;" onclick="resetAll()">데이터 초기화</button>
+    </div>
+  </div>`;
+}
+function saveSettings() {
+  const prev = D.settings || {};
+  D.settings = {
+    ...prev,
+    vatRegistered: document.getElementById('vat-type').value==='1',
+    cnyRate: parseFloat(document.getElementById('cny-rate')?.value) || 310,
+    marginTarget: parseFloat(document.getElementById('margin-target')?.value) || 40,
+  };
+  dbSave();
+  alert('✅ 설정이 저장됐습니다.');
+}
+
+// ===================== CHARTS =====================
+const chartInstances = {};
+function makeChart(id, type, labels, data, colors, yFmt) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(chartInstances[id]) chartInstances[id].destroy();
+  chartInstances[id] = new Chart(el, {
+    type,
+    data: {
+      labels,
+      datasets:[{
+        data,
+        backgroundColor: Array.isArray(colors) ? colors : colors,
+        borderColor: type==='line' ? colors : undefined,
+        fill: type==='line',
+        tension: 0.35,
+        borderRadius: type==='bar' ? 4 : 0,
+        pointBackgroundColor: type==='line' ? colors : undefined,
+        pointRadius: type==='line' ? 3 : 0,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{color:'rgba(48,54,61,.6)'},ticks:{color:'#8b949e',font:{size:10}}},
+        y:{grid:{color:'rgba(48,54,61,.6)'},ticks:{color:'#8b949e',font:{size:10},callback:v=>'₩'+fmt(v)}}
+      }
+    }
+  });
+}
+function initDashChart() {
+  const md = monthlyData();
+  makeChart('ch-dash','bar',md.map(m=>m.label),md.map(m=>m.profit),md.map(m=>m.profit>=0?'rgba(63,185,80,.7)':'rgba(248,81,73,.7)'));
+}
+function initAnalysisCharts() {
+  const md = monthlyData(), wd = weeklyData();
+  makeChart('ch-monthly','line',md.map(m=>m.label),md.map(m=>m.profit),'#f78166');
+  makeChart('ch-weekly','bar',wd.map(w=>w.label),wd.map(w=>w.profit),wd.map(w=>w.profit>=0?'rgba(88,166,255,.7)':'rgba(248,81,73,.7)'));
+  const pnames = D.products.map(p=>p.name);
+  const pprofs = D.products.map(p=>D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+saleProfit(s),0));
+  if(document.getElementById('ch-prods'))
+    makeChart('ch-prods','bar',pnames,pprofs,pprofs.map(v=>v>=0?'rgba(63,185,80,.7)':'rgba(248,81,73,.7)'));
+}
+
+// ===================== PRODUCT MODAL =====================
+function openProdModal(id=null) {
+  editProdId = id;
+  const p = id ? getProd(id) : null;
+  document.getElementById('m-product-title').textContent = id ? '상품 수정' : '상품 등록';
+  document.getElementById('m-product-body').innerHTML = `
+  <div class="fgrid">
+    <div class="fg span2"><label class="fl">상품명 *</label><input class="fi" id="p-name" value="${p?.name||''}" placeholder="예: 무선 마우스 USB-C"></div>
+    <div class="fg">
+      <label class="fl">카테고리</label>
+      <select class="fi" id="p-cat" onchange="autoFee()">
+        ${Object.keys(FEES).map(k=>`<option value="${k}" ${p?.category===k?'selected':''}>${k} (${FEES[k]}%)</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">쿠팡 수수료율 (%)</label>
+      <input class="fi" id="p-fee" type="number" step="0.1" value="${p?.feeRate??10.8}">
+      <div class="help">카테고리 선택 시 자동 입력됨</div>
+    </div>
+    <div class="fg">
+      <label class="fl">판매가 (원) *</label>
+      <input class="fi" id="p-sp" type="number" value="${p?.sellingPrice||''}" placeholder="15000" oninput="prevProd()">
+    </div>
+    <div class="fg">
+      <label class="fl">위안화 원가 (¥)</label>
+      <input class="fi" id="p-cny" type="number" step="0.1" value="${p?.cnyPrice||''}" placeholder="예: 25.5" oninput="autoCnyCalc()">
+      <div class="help">입력 시 사입단가 자동 계산 (× ${getCnyRate()}원). 직접 입력도 가능.</div>
+    </div>
+    <div class="fg">
+      <label class="fl">사입단가 (원) *</label>
+      <input class="fi" id="p-pp" type="number" value="${p?.purchasePrice||''}" placeholder="위안화 입력 시 자동계산" oninput="prevProd()">
+    </div>
+    <div class="fg">
+      <label class="fl">쿠팡 사이즈 구분</label>
+      <select class="fi" id="p-size">
+        <option value="" ${!p?.sizeCategory?'selected':''}>미지정</option>
+        <option value="극소형" ${p?.sizeCategory==='극소형'?'selected':''}>극소형</option>
+        <option value="소형" ${p?.sizeCategory==='소형'?'selected':''}>소형</option>
+        <option value="중형" ${p?.sizeCategory==='중형'?'selected':''}>중형</option>
+        <option value="대형" ${p?.sizeCategory==='대형'?'selected':''}>대형</option>
+        <option value="1특대형" ${p?.sizeCategory==='1특대형'?'selected':''}>1특대형</option>
+        <option value="2특대형" ${p?.sizeCategory==='2특대형'?'selected':''}>2특대형</option>
+      </select>
+      <div class="help">쿠팡 로켓그로스 사이즈 기준 — 입출고비/배송비 계산기에서 확인한 사이즈 선택</div>
+    </div>
+    <div class="fg">
+      <label class="fl">입출고비 (원/개)</label>
+      <input class="fi" id="p-logi" type="number" value="${p?.logisticsCost||0}" oninput="prevProd()">
+      <div class="help">쿠팡 입출고비 계산기 기준값 입력 (할인 전 가격)</div>
+    </div>
+    <div class="fg">
+      <label class="fl">배송비 (원/개)</label>
+      <input class="fi" id="p-delivery" type="number" value="${p?.deliveryCost||0}" oninput="prevProd()">
+      <div class="help">쿠팡 배송비 계산기 기준값 입력 (할인 전 가격)</div>
+    </div>
+    <div class="fg">
+      <label class="fl">정산 주기 (일)</label>
+      <input class="fi" id="p-settle" type="number" value="${p?.settlementDays||14}">
+      <div class="help">로켓그로스 기본 14일</div>
+    </div>
+    <div class="fg span2"><label class="fl">메모</label><input class="fi" id="p-note" value="${p?.note||''}" placeholder="옵션, 색상 등"></div>
+  </div>
+  <div class="preview-box" id="p-prev" style="margin-top:10px;"></div>`;
+  document.getElementById('m-product').classList.add('open');
+  prevProd();
+}
+function autoFee() {
+  const cat = document.getElementById('p-cat').value;
+  if(FEES[cat]) { document.getElementById('p-fee').value = FEES[cat]; prevProd(); }
+}
+function autoCnyCalc() {
+  const cny = parseFloat(document.getElementById('p-cny')?.value) || 0;
+  if (cny > 0) {
+    const krw = Math.round(cny * getCnyRate());
+    document.getElementById('p-pp').value = krw;
+  }
+  prevProd();
+}
+function prevProd() {
+  const sp=parseFloat(document.getElementById('p-sp')?.value)||0;
+  const pp=parseFloat(document.getElementById('p-pp')?.value)||0;
+  const fee=parseFloat(document.getElementById('p-fee')?.value)||0;
+  const logi=parseFloat(document.getElementById('p-logi')?.value)||0;
+  const delivery=parseFloat(document.getElementById('p-delivery')?.value)||0;
+  const el = document.getElementById('p-prev'); if(!el) return;
+  if(!sp){el.innerHTML='<span style="color:var(--muted);">판매가 입력 후 예상 수익이 표시됩니다</span>';return;}
+  const feeAmt = sp * fee / 100;
+  const logistics = logi + delivery;
+  const coupangCost = (feeAmt + logistics) * 1.1;
+  const cost = pp + coupangCost;
+  const profit = sp - coupangCost - pp;
+  const mg = sp > 0 ? profit / sp * 100 : 0;
+  const targetMg = getMarginTarget();
+  const ceiling = sp*(1-fee/100-targetMg/100);
+  const ceilOk = cost <= ceiling;
+  const endRoas = profit>0 ? (sp/profit)*1.1 : null;
+  const profitCol = profit>=0?'var(--green)':'var(--red)';
+  const ceilCol = ceilOk?'var(--green)':'var(--red)';
+  el.innerHTML=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">수수료 차감 실수령</div>
+      <div style="font-size:12px;font-weight:600;">₩${fmt(sp - sp*fee/100)}</div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">쿠팡 비용 합계 (VAT포함)</div>
+      <div style="font-size:12px;font-weight:600;">₩${fmt(coupangCost)} <span style="font-size:9px;color:var(--muted);">(수수료${fmt(feeAmt)}+물류${fmt(logistics)})×1.1</span></div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">단위 마진 / 마진율</div>
+      <div style="font-size:13px;font-weight:800;color:${profitCol};">₩${fmt(profit)} / ${fmtf(mg)}%</div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">엔드 ROAS (광고 손익분기)</div>
+      <div style="font-size:13px;font-weight:800;color:var(--blue);">${endRoas ? Math.round(endRoas*100)+'%' : '-'}</div>
+    </div>
+    <div style="grid-column:span 2;padding-top:6px;border-top:1px solid var(--border);">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">원가 상한선 (목표 마진 ${targetMg}% 기준) · 현재 원가 ${ceilOk?'✅ 적합':'❌ 초과'}</div>
+      <div style="font-size:12px;font-weight:700;color:${ceilCol};">
+        상한선 ₩${fmt(ceiling)} · 현재 ₩${fmt(cost)} · 여유 ${ceilOk?'+':''} ₩${fmt(ceiling-cost)}
+      </div>
+    </div>
+  </div>`;
+}
+function saveProduct() {
+  const name=document.getElementById('p-name').value.trim();
+  const sp=parseFloat(document.getElementById('p-sp').value)||0;
+  const pp=parseFloat(document.getElementById('p-pp').value)||0;
+  if(!name){alert('상품명을 입력하세요');return;}
+  if(!sp||!pp){alert('판매가와 사입단가를 입력하세요');return;}
+  const data={
+    name, category:document.getElementById('p-cat').value,
+    feeRate:parseFloat(document.getElementById('p-fee').value)||10.8,
+    sellingPrice:sp, purchasePrice:pp,
+    cnyPrice:parseFloat(document.getElementById('p-cny').value)||0,
+    sizeCategory:document.getElementById('p-size').value,
+    logisticsCost:parseFloat(document.getElementById('p-logi').value)||0,
+    deliveryCost:parseFloat(document.getElementById('p-delivery').value)||0,
+    settlementDays:parseInt(document.getElementById('p-settle').value)||14,
+    note:document.getElementById('p-note').value.trim(),
+  };
+  if(editProdId){const i=D.products.findIndex(p=>p.id===editProdId);D.products[i]={...D.products[i],...data};}
+  else D.products.push({id:uid(),...data});
+  dbSave(); closeModal('m-product'); renderPage(currentPage);
+}
+function delProd(id) {
+  if(!confirm('상품 삭제 시 관련 판매 내역도 삭제됩니다. 계속할까요?')) return;
+  D.products=D.products.filter(p=>p.id!==id);
+  D.sales=D.sales.filter(s=>s.productId!==id);
+  D.stock=D.stock.filter(s=>s.productId!==id);
+  dbSave(); renderPage(currentPage);
+}
+
+// ===================== SALE MODAL =====================
+function openSaleModal(pid) {
+  saleProdId = pid;
+  const p = getProd(pid);
+  document.getElementById('m-sale-body').innerHTML = `
+  <div class="alert ai" style="margin-bottom:12px;">📦 <strong>${p.name}</strong> 판매 내역 입력</div>
+  <div class="fgrid">
+    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${today()}"></div>
+    <div class="fg"><label class="fl">실제 판매가 (원)</label><input class="fi" id="s-sp" type="number" value="${p.sellingPrice||''}" placeholder="${p.sellingPrice||'상품 등록가 사용'}"><div class="help">비워두면 등록된 판매가 적용</div></div>
+    <div class="fg"><label class="fl">판매 수량 *</label><input class="fi" id="s-qty" type="number" min="0" value="1"></div>
+    <div class="fg"><label class="fl">반품 수량</label><input class="fi" id="s-ret" type="number" min="0" value="0"></div>
+    <div class="fg"><label class="fl">광고비 (원)</label><input class="fi" id="s-adcost" type="number" min="0" value="0"></div>
+    <div class="fg"><label class="fl">광고를 통한 매출 (원)</label><input class="fi" id="s-adsales" type="number" min="0" value="0"><div class="help">ROAS 계산용</div></div>
+    <div class="fg span2"><label class="fl">메모</label><input class="fi" id="s-note" placeholder="특이사항"></div>
+  </div>`;
+  document.getElementById('m-sale').classList.add('open');
+}
+function saveSale() {
+  const qty=parseInt(document.getElementById('s-qty').value)||0;
+  const date=document.getElementById('s-date').value;
+  if(!qty||!date){alert('날짜와 판매수량을 입력하세요');return;}
+  D.sales.push({
+    id:uid(), productId:saleProdId, date, qty,
+    returnQty:parseInt(document.getElementById('s-ret').value)||0,
+    sellingPrice:parseFloat(document.getElementById('s-sp').value)||0,
+    adCost:parseFloat(document.getElementById('s-adcost').value)||0,
+    adSales:parseFloat(document.getElementById('s-adsales').value)||0,
+    note:document.getElementById('s-note').value.trim(),
+  });
+  dbSave(); closeModal('m-sale'); renderPage(currentPage);
+}
+function delSale(id) {
+  if(!confirm('이 판매 내역을 삭제하시겠습니까?')) return;
+  D.sales=D.sales.filter(s=>s.id!==id);
+  dbSave(); renderPage(currentPage);
+}
+
+// ===================== STOCK MODAL =====================
+function openStockEditModal(sid) {
+  const s = D.stock.find(x=>x.id===sid);
+  if(!s) return;
+  const p = getProd(s.productId);
+  const isDisposal = s.type==='disposal';
+  costMode='stockEdit'; editCostId=sid;
+  document.getElementById('m-cost-title').textContent=`${isDisposal?'폐기':'사입'} 수정 — ${p?.name||''}`;
+  document.getElementById('m-cost-body').innerHTML=`
+  <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="ck-date" type="date" value="${s.date||''}"></div>
+  <div class="fg"><label class="fl">${isDisposal?'폐기':'사입'} 수량 *</label><input class="fi" id="ck-qty" type="number" min="1" value="${s.qty||''}"></div>
+  <div class="fg"><label class="fl">메모</label><input class="fi" id="ck-note" value="${s.note||''}"></div>`;
+  document.getElementById('m-cost').classList.add('open');
+}
+function delStock(sid) {
+  if(!confirm('이 내역을 삭제하시겠습니까?')) return;
+  D.stock = D.stock.filter(s=>s.id!==sid);
+  dbSave(); renderPage(currentPage);
+}
+function openStockModal(pid) {
+  const p=getProd(pid);
+  costMode='stock'; editCostId=pid;
+  document.getElementById('m-cost-title').textContent=`사입 입력 — ${p.name}`;
+  document.getElementById('m-cost-body').innerHTML=`
+  <div class="fg"><label class="fl">사입 날짜 *</label><input class="fi" id="ck-date" type="date" value="${today()}"></div>
+  <div class="fg"><label class="fl">사입 수량 *</label><input class="fi" id="ck-qty" type="number" min="1" placeholder="예: 100"></div>
+  <div class="fg"><label class="fl">메모</label><input class="fi" id="ck-note" placeholder="배치번호, 공급처 등"></div>`;
+  document.getElementById('m-cost').classList.add('open');
+}
+function openDisposalModal(pid) {
+  const p=getProd(pid);
+  const stk=stockLevel(pid);
+  costMode='disposal'; editCostId=pid;
+  document.getElementById('m-cost-title').textContent=`재고 폐기 — ${p.name}`;
+  document.getElementById('m-cost-body').innerHTML=`
+  <div class="alert aw" style="margin-bottom:12px;">현재 재고: <strong>${stk}개</strong> · 불량품, 손상 등으로 판매 불가한 수량을 입력하세요.</div>
+  <div class="fg"><label class="fl">폐기 날짜 *</label><input class="fi" id="ck-date" type="date" value="${today()}"></div>
+  <div class="fg"><label class="fl">폐기 수량 *</label><input class="fi" id="ck-qty" type="number" min="1" max="${stk}" placeholder="예: 10"></div>
+  <div class="fg"><label class="fl">폐기 사유</label><input class="fi" id="ck-note" placeholder="불량, 파손, 유통기한 등"></div>`;
+  document.getElementById('m-cost').classList.add('open');
+}
+
+// ===================== COST MODAL =====================
+function openCostModal(type, id=null) {
+  costMode=type; editCostId=id;
+  const c=id?(type==='base'?D.baseCosts:D.extraCosts).find(x=>x.id===id):null;
+  document.getElementById('m-cost-title').textContent=
+    type==='base'?(id?'기본비용 수정':'기본 투자비용 추가'):(id?'추가비용 수정':'추가 투자비용 추가');
+  if(type==='base') {
+    document.getElementById('m-cost-body').innerHTML=`
+    <div class="fg"><label class="fl">항목명 *</label><input class="fi" id="ck-name" value="${c?.name||''}" placeholder="예: 카페24 구독료, 사업자금 대출"></div>
+    <div class="fgrid">
+      <div class="fg"><label class="fl">금액 (원) *</label><input class="fi" id="ck-amount" type="number" value="${c?.amount||''}"></div>
+      <div class="fg"><label class="fl">유형</label><select class="fi" id="ck-monthly"><option value="1" ${c?.isMonthly?'selected':''}>월 정액</option><option value="0" ${c&&!c.isMonthly?'selected':''}>일회성</option></select></div>
+      <div class="fg"><label class="fl">시작일</label><input class="fi" id="ck-start" type="date" value="${c?.startDate||''}"></div>
+      <div class="fg"><label class="fl">대출 여부</label><select class="fi" id="ck-loan"><option value="0" ${!c?.isLoan?'selected':''}>해당없음</option><option value="1" ${c?.isLoan?'selected':''}>대출금</option></select></div>
+      <div class="fg span2"><label class="fl">연 이자율 (%)</label><input class="fi" id="ck-rate" type="number" step="0.1" value="${c?.interestRate||0}" placeholder="0"></div>
+    </div>
+    <div class="fg"><label class="fl">메모</label><input class="fi" id="ck-note" value="${c?.note||''}"></div>`;
+  } else {
+    document.getElementById('m-cost-body').innerHTML=`
+    <div class="fg"><label class="fl">항목명 *</label><input class="fi" id="ck-name" value="${c?.name||''}" placeholder="예: 포장재 구매, 체험단 비용"></div>
+    <div class="fgrid">
+      <div class="fg"><label class="fl">금액 (원) *</label><input class="fi" id="ck-amount" type="number" value="${c?.amount||''}"></div>
+      <div class="fg"><label class="fl">날짜</label><input class="fi" id="ck-date" type="date" value="${c?.date||today()}"></div>
+      <div class="fg"><label class="fl">카테고리</label>
+        <select class="fi" id="ck-cat">
+          ${['포장비','마케팅비','광고비','인건비','배송비','부가서비스','기타'].map(v=>`<option value="${v}" ${c?.category===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fg"><label class="fl">연결 상품</label>
+        <select class="fi" id="ck-prod">
+          <option value="">없음</option>
+          ${D.products.map(p=>`<option value="${p.id}" ${c?.linkedProductId===p.id?'selected':''}>${p.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">메모</label><input class="fi" id="ck-note" value="${c?.note||''}"></div>`;
+  }
+  document.getElementById('m-cost').classList.add('open');
+}
+function saveCost() {
+  if(costMode==='stockEdit') {
+    const qty=parseInt(document.getElementById('ck-qty')?.value)||0;
+    if(!qty){alert('수량을 입력하세요');return;}
+    const idx=D.stock.findIndex(s=>s.id===editCostId);
+    if(idx>-1){
+      D.stock[idx]={...D.stock[idx],qty,date:document.getElementById('ck-date')?.value||'',note:document.getElementById('ck-note')?.value||''};
+    }
+    dbSave(); closeModal('m-cost'); renderPage(currentPage); return;
+  }
+  if(costMode==='stock'||costMode==='disposal') {
+    const qty=parseInt(document.getElementById('ck-qty')?.value)||0;
+    if(!qty){alert('수량을 입력하세요');return;}
+    if(costMode==='disposal'){
+      const stk=stockLevel(editCostId);
+      if(qty>stk){alert(`폐기 수량(${qty}개)이 현재 재고(${stk}개)를 초과합니다.`);return;}
+    }
+    D.stock.push({id:uid(),productId:editCostId,qty,type:costMode==='disposal'?'disposal':'purchase',date:document.getElementById('ck-date')?.value||'',note:document.getElementById('ck-note')?.value||''});
+    dbSave(); closeModal('m-cost'); renderPage(currentPage); return;
+  }
+  const name=document.getElementById('ck-name')?.value.trim();
+  const amount=parseFloat(document.getElementById('ck-amount')?.value)||0;
+  if(!name||!amount){alert('항목명과 금액을 입력하세요');return;}
+  if(costMode==='base') {
+    const data={name,amount,isMonthly:document.getElementById('ck-monthly').value==='1',startDate:document.getElementById('ck-start').value,isLoan:document.getElementById('ck-loan').value==='1',interestRate:parseFloat(document.getElementById('ck-rate').value)||0,note:document.getElementById('ck-note').value};
+    if(editCostId){const i=D.baseCosts.findIndex(c=>c.id===editCostId);D.baseCosts[i]={...D.baseCosts[i],...data};}
+    else D.baseCosts.push({id:uid(),...data});
+  } else {
+    const data={name,amount,date:document.getElementById('ck-date').value,category:document.getElementById('ck-cat').value,linkedProductId:document.getElementById('ck-prod').value||null,note:document.getElementById('ck-note').value};
+    if(editCostId){const i=D.extraCosts.findIndex(c=>c.id===editCostId);D.extraCosts[i]={...D.extraCosts[i],...data};}
+    else D.extraCosts.push({id:uid(),...data});
+  }
+  dbSave(); closeModal('m-cost'); renderPage(currentPage);
+}
+function delCost(type,id) {
+  if(!confirm('삭제하시겠습니까?')) return;
+  if(type==='base') D.baseCosts=D.baseCosts.filter(c=>c.id!==id);
+  else D.extraCosts=D.extraCosts.filter(c=>c.id!==id);
+  dbSave(); renderPage(currentPage);
+}
+
+// ===================== GOAL MODAL =====================
+function openGoalModal() {
+  document.getElementById('m-goal-body').innerHTML=`
+  <div class="fg"><label class="fl">이번달 목표 순수익 (원)</label><input class="fi" id="g-monthly" type="number" value="${D.goals.monthlyTarget||''}" placeholder="예: 1000000"></div>
+  <div class="fg"><label class="fl">총 목표 순수익 (원)</label><input class="fi" id="g-total" type="number" value="${D.goals.totalTarget||''}" placeholder="누적 목표금액"></div>
+  <div class="fg"><label class="fl">사업 시작일</label><input class="fi" id="g-start" type="date" value="${D.goals.startDate||''}"></div>`;
+  document.getElementById('m-goal').classList.add('open');
+}
+function saveGoal() {
+  D.goals={monthlyTarget:parseFloat(document.getElementById('g-monthly').value)||0,totalTarget:parseFloat(document.getElementById('g-total').value)||0,startDate:document.getElementById('g-start').value};
+  dbSave(); closeModal('m-goal'); renderPage(currentPage);
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ===================== EXPORT/IMPORT =====================
+function exportJSON() {
+  const blob=new Blob([JSON.stringify(D,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`coupang_backup_${today()}.json`;
+  a.click();
+}
+function importJSON(input) {
+  const file=input.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!confirm('현재 데이터를 덮어씁니다. 계속하시겠습니까?')) return;
+      D={...D,...data};
+      dbSave(); renderPage(currentPage);
+      alert('✅ 데이터를 불러왔습니다!');
+    }catch{alert('파일 형식이 올바르지 않습니다');}
+  };
+  r.readAsText(file); input.value='';
+}
+function exportCSV() {
+  const h=['날짜','상품명','판매가','판매수량','반품수량','순판매','매출','광고비','광고매출','ROAS','순수익','정산예정일'];
+  const rows=D.sales.map(s=>{
+    const p=getProd(s.productId);
+    const sp=s.sellingPrice||p?.sellingPrice||0;
+    const nq=(s.qty||0)-(s.returnQty||0);
+    const roas=s.adCost>0?((s.adSales||0)/s.adCost*100).toFixed(1):'';
+    return [s.date,p?.name||'',sp,s.qty,s.returnQty||0,nq,sp*nq,s.adCost||0,s.adSales||0,roas,saleProfit(s),settleDate(s).toLocaleDateString('ko-KR')];
+  });
+  const csv=[h,...rows].map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`coupang_sales_${today()}.csv`; a.click();
+}
+function resetAll() {
+  if(!confirm('정말로 모든 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+  D={products:[],sales:[],stock:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true}};
+  dbSave(); renderPage(currentPage);
+}
+
+// ===================== GOOGLE SHEETS SYNC =====================
+function saveGsUrl() {
+  const url = document.getElementById('gs-url')?.value.trim();
+  if (!url) { alert('URL을 입력해주세요'); return; }
+  if (!url.includes('script.google.com')) { alert('올바른 Apps Script URL이 아닙니다'); return; }
+  localStorage.setItem('gsScriptUrl', url);
+  renderPage('settings');
+  alert('✅ URL이 저장됐습니다!');
+}
+
+async function gsSave() {
+  const url = localStorage.getItem('gsScriptUrl');
+  if (!url) { alert('먼저 Apps Script URL을 입력하고 저장하세요 (설정 탭)'); navigate('settings'); return; }
+  const btn = document.getElementById('gs-save-btn');
+  const icon = document.getElementById('gs-save-icon');
+  if (btn) { btn.disabled = true; if(icon) icon.textContent = '⏳'; }
+  try {
+    const payload = JSON.stringify(D);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: payload,
+      mode: 'no-cors'
+    });
+    // no-cors → response는 opaque라 status 확인 불가, 성공으로 간주
+    const now = new Date().toLocaleString('ko-KR');
+    localStorage.setItem('gsLastSync', now);
+    if (btn) { btn.disabled = false; if(icon) icon.textContent = '☁️'; }
+    alert('✅ 구글 시트에 저장됐습니다!\n' + now);
+    if (currentPage === 'settings') renderPage('settings');
+  } catch(e) {
+    if (btn) { btn.disabled = false; if(icon) icon.textContent = '☁️'; }
+    alert('❌ 저장 실패: ' + e.message + '\n\nApps Script URL이 올바른지, 배포가 완료됐는지 확인하세요.');
+  }
+}
+
+async function gsLoad() {
+  const url = localStorage.getItem('gsScriptUrl');
+  if (!url) { alert('먼저 Apps Script URL을 입력하고 저장하세요 (설정 탭)'); navigate('settings'); return; }
+  if (!confirm('구글 시트의 데이터로 현재 기기를 덮어씁니다. 계속할까요?\n\n⚠️ 현재 저장되지 않은 데이터는 사라집니다.')) return;
+  const btn = document.getElementById('gs-load-btn');
+  const icon = document.getElementById('gs-load-icon');
+  if (btn) { btn.disabled = true; if(icon) icon.textContent = '⏳'; }
+  try {
+    const res = await fetch(url + '?t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    if (!text || text === '{}') { 
+      if (btn) { btn.disabled = false; if(icon) icon.textContent = '📥'; }
+      alert('구글 시트에 저장된 데이터가 없습니다.\n먼저 "구글 시트에 저장"을 실행해주세요.'); 
+      return; 
+    }
+    const data = JSON.parse(text);
+    D = { ...D, ...data };
+    await dbSave();
+    const now = new Date().toLocaleString('ko-KR');
+    localStorage.setItem('gsLastSync', now);
+    if (btn) { btn.disabled = false; if(icon) icon.textContent = '📥'; }
+    alert('✅ 데이터를 불러왔습니다!\n상품 ' + D.products.length + '개 · 판매 ' + D.sales.length + '건');
+    renderPage(currentPage);
+  } catch(e) {
+    if (btn) { btn.disabled = false; if(icon) icon.textContent = '📥'; }
+    alert('❌ 불러오기 실패: ' + e.message + '\n\nApps Script URL과 배포 설정을 확인하세요.');
+  }
+}
+
+// ===================== THEME =====================
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  document.getElementById('theme-toggle').textContent = isLight ? '🌙' : '☀️';
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  // Redraw charts to match new background
+  Object.values(chartInstances).forEach(c => { try { c.update(); } catch(e){} });
+}
+function applyTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.documentElement.classList.add('light');
+    document.getElementById('theme-toggle').textContent = '🌙';
+  } else {
+    document.getElementById('theme-toggle').textContent = '☀️';
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.page)));
+document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{/* 바깥 클릭으로 닫기 비활성화 */}));
+
+const MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+function updateDate() {
+  const n=new Date();
+  document.getElementById('sdate').textContent=`${n.getFullYear()}년 ${MONTHS[n.getMonth()]} ${n.getDate()}일`;
+}
+
+(async()=>{
+  await initDB();
+  await dbLoad();
+  document.getElementById('loading').style.display='none';
+  applyTheme();
+  updateDate();
+  navigate('dashboard');
+})();
+</script>
+</body>
+</html>
