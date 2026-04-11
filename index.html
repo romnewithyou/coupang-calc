@@ -488,6 +488,18 @@ function renderDashboard() {
 
 // ===================== PRODUCTS =====================
 let saleFilterPid = '';
+let extraCatFilter = '';
+let stockPidFilter = '';
+function filterExtraCat(cat) {
+  extraCatFilter = cat;
+  renderPage('costs');
+}
+function filterStockPid(pid) {
+  stockPidFilter = pid;
+  renderPage('inventory');
+  // 사입/폐기 내역 섹션으로 스크롤
+  setTimeout(()=>{const el=document.getElementById('stock-history');if(el)el.scrollIntoView({behavior:'smooth'});},100);
+}
 function renderProducts() {
   const prods = D.products;
   const now = new Date();
@@ -619,7 +631,7 @@ function renderInventory() {
           const dl = avg>0 ? Math.floor(stk/avg) : null;
           const deplDate = dl!==null ? new Date(now.getTime()+dl*86400000) : null;
           return `<tr>
-            <td><strong>${p.name}</strong></td>
+            <td><strong style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px;" onclick="filterStockPid('${p.id}')">${p.name}</strong></td>
             <td>${fmt(bought)}개</td>
             <td>${fmt(sold)}개</td>
             <td>${fmt(ret)}개</td>
@@ -640,8 +652,11 @@ function renderInventory() {
     </div>
   </div>
 
-  <div class="sh" style="margin-top:4px;">
-    <div class="stitle">사입 / 폐기 내역</div>
+  <div class="sh" style="margin-top:4px;" id="stock-history">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="stitle">사입 / 폐기 내역</div>
+      ${stockPidFilter ? `<span class="tag tb">${getProd(stockPidFilter)?.name||''}</span><button class="btn btn-ghost btn-sm" onclick="stockPidFilter='';renderPage('inventory')">✕ 전체보기</button>` : ''}
+    </div>
   </div>
   <div class="card" style="padding:0;margin-bottom:18px;">
     ${D.stock.length===0 ? '<div class="empty" style="padding:24px;"><div class="etitle">사입 내역이 없습니다</div></div>' : `
@@ -651,7 +666,7 @@ function renderInventory() {
           <th>날짜</th><th>상품명</th><th>구분</th><th>수량</th><th>메모</th><th>관리</th>
         </tr></thead>
         <tbody>
-        ${D.stock.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+        ${D.stock.filter(s=>!stockPidFilter||s.productId===stockPidFilter).slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
           const p=getProd(s.productId);
           const isDisposal=s.type==='disposal';
           return `<tr>
@@ -745,13 +760,29 @@ function renderCosts() {
   </div>
 
   <div class="sh"><div class="stitle">추가 투자비용</div><button class="btn btn-primary" onclick="openCostModal('extra')">+ 추가</button></div>
+  ${(()=>{
+    const cats = ['포장비','마케팅비','광고비','인건비','배송비','프로그램 구독료','기타'];
+    const totals = cats.map(cat=>({cat, amt:D.extraCosts.filter(c=>c.category===cat).reduce((a,c)=>a+(c.amount||0),0)})).filter(x=>x.amt>0);
+    if(!totals.length) return '';
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      ${totals.map(x=>`
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 13px;cursor:pointer;" onclick="filterExtraCat('${x.cat}')">
+          <div style="font-size:10px;color:var(--muted);">${x.cat}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--yellow);">₩${fmt(x.amt)}</div>
+        </div>`).join('')}
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 13px;cursor:pointer;" onclick="filterExtraCat('')">
+        <div style="font-size:10px;color:var(--muted);">전체</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);">₩${fmt(D.extraCosts.reduce((a,c)=>a+(c.amount||0),0))}</div>
+      </div>
+    </div>`;
+  })()}
   <div class="card" style="padding:0;">
     ${D.extraCosts.length===0 ? '<div class="empty" style="padding:30px;"><div class="etitle">포장비, 마케팅, 광고비, 기타 비용</div></div>' : `
     <div class="tbl-wrap">
       <table>
         <thead><tr><th>항목명</th><th>카테고리</th><th>금액</th><th>날짜</th><th>연결 상품</th><th>관리</th></tr></thead>
         <tbody>
-        ${D.extraCosts.map(c=>{
+        ${D.extraCosts.filter(c=>!extraCatFilter||c.category===extraCatFilter).map(c=>{
           const lp = c.linkedProductId ? getProd(c.linkedProductId) : null;
           return `<tr>
             <td><strong>${c.name}</strong>${c.note?`<div style="font-size:10px;color:var(--muted);">${c.note}</div>`:''}</td>
@@ -1307,7 +1338,7 @@ function openCostModal(type, id=null) {
       <div class="fg"><label class="fl">날짜</label><input class="fi" id="ck-date" type="date" value="${c?.date||today()}"></div>
       <div class="fg"><label class="fl">카테고리</label>
         <select class="fi" id="ck-cat">
-          ${['포장비','마케팅비','광고비','인건비','배송비','부가서비스','기타'].map(v=>`<option value="${v}" ${c?.category===v?'selected':''}>${v}</option>`).join('')}
+          ${['포장비','마케팅비','광고비','인건비','배송비','프로그램 구독료','기타'].map(v=>`<option value="${v}" ${c?.category===v?'selected':''}>${v}</option>`).join('')}
         </select>
       </div>
       <div class="fg"><label class="fl">연결 상품</label>
