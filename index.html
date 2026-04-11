@@ -633,7 +633,39 @@ function renderInventory() {
     </div>
   </div>
 
-  <div class="sh"><div class="stitle">정산 예정 내역</div></div>
+  <div class="sh" style="margin-top:4px;">
+    <div class="stitle">사입 / 폐기 내역</div>
+  </div>
+  <div class="card" style="padding:0;margin-bottom:18px;">
+    ${D.stock.length===0 ? '<div class="empty" style="padding:24px;"><div class="etitle">사입 내역이 없습니다</div></div>' : `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>날짜</th><th>상품명</th><th>구분</th><th>수량</th><th>메모</th><th>관리</th>
+        </tr></thead>
+        <tbody>
+        ${D.stock.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+          const p=getProd(s.productId);
+          const isDisposal=s.type==='disposal';
+          return `<tr>
+            <td>${s.date||'-'}</td>
+            <td>${p?.name||'-'}</td>
+            <td><span class="tag ${isDisposal?'tr':'tg'}">${isDisposal?'🗑 폐기':'📦 사입'}</span></td>
+            <td class="${isDisposal?'neg':''}">${isDisposal?'-':''}${s.qty}개</td>
+            <td style="color:var(--muted);font-size:11px;">${s.note||'-'}</td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-ghost btn-sm" onclick="openStockEditModal('${s.id}')">수정</button>
+                <button class="btn btn-danger btn-sm" onclick="delStock('${s.id}')">삭제</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>
+  <div class="sh" style="margin-top:4px;"><div class="stitle">정산 예정 내역</div></div>
   <div class="card" style="padding:0;">
     <div class="tbl-wrap">
       <table>
@@ -660,7 +692,8 @@ function renderInventory() {
         </tbody>
       </table>
     </div>
-  </div>`}`;
+  </div>
+  `}`;
 }
 
 // ===================== COSTS =====================
@@ -1201,7 +1234,24 @@ function delSale(id) {
 }
 
 // ===================== STOCK MODAL =====================
-function openStockModal(pid) {
+function openStockEditModal(sid) {
+  const s = D.stock.find(x=>x.id===sid);
+  if(!s) return;
+  const p = getProd(s.productId);
+  const isDisposal = s.type==='disposal';
+  costMode='stockEdit'; editCostId=sid;
+  document.getElementById('m-cost-title').textContent=`${isDisposal?'폐기':'사입'} 수정 — ${p?.name||''}`;
+  document.getElementById('m-cost-body').innerHTML=`
+  <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="ck-date" type="date" value="${s.date||''}"></div>
+  <div class="fg"><label class="fl">${isDisposal?'폐기':'사입'} 수량 *</label><input class="fi" id="ck-qty" type="number" min="1" value="${s.qty||''}"></div>
+  <div class="fg"><label class="fl">메모</label><input class="fi" id="ck-note" value="${s.note||''}"></div>`;
+  document.getElementById('m-cost').classList.add('open');
+}
+function delStock(sid) {
+  if(!confirm('이 내역을 삭제하시겠습니까?')) return;
+  D.stock = D.stock.filter(s=>s.id!==sid);
+  dbSave(); renderPage(currentPage);
+}
   const p=getProd(pid);
   costMode='stock'; editCostId=pid;
   document.getElementById('m-cost-title').textContent=`사입 입력 — ${p.name}`;
@@ -1264,6 +1314,15 @@ function openCostModal(type, id=null) {
   document.getElementById('m-cost').classList.add('open');
 }
 function saveCost() {
+  if(costMode==='stockEdit') {
+    const qty=parseInt(document.getElementById('ck-qty')?.value)||0;
+    if(!qty){alert('수량을 입력하세요');return;}
+    const idx=D.stock.findIndex(s=>s.id===editCostId);
+    if(idx>-1){
+      D.stock[idx]={...D.stock[idx],qty,date:document.getElementById('ck-date')?.value||'',note:document.getElementById('ck-note')?.value||''};
+    }
+    dbSave(); closeModal('m-cost'); renderPage(currentPage); return;
+  }
   if(costMode==='stock'||costMode==='disposal') {
     const qty=parseInt(document.getElementById('ck-qty')?.value)||0;
     if(!qty){alert('수량을 입력하세요');return;}
