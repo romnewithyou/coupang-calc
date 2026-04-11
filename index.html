@@ -144,12 +144,87 @@ select.fi{cursor:pointer;}
 #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;font-size:13px;color:var(--muted);flex-direction:column;gap:10px;}
 .spin{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-::-webkit-scrollbar{width:5px;height:5px;}
-::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
-</style>
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .hide-mobile { display: none; }
+  #sidebar { display: none; }
+  /* 메인 전체 너비 */
+  #main { margin-left: 0; padding-bottom: 70px; }
+  /* 헤더 간소화 */
+  #header { padding: 10px 14px; }
+  .h-title { font-size: 13px; }
+  .h-actions .btn { font-size: 11px; padding: 5px 8px; }
+  /* 컨텐츠 패딩 축소 */
+  #content { padding: 12px; }
+  /* 그리드 1열 */
+  .g4, .g3, .g2 { grid-template-columns: 1fr !important; gap: 10px; }
+  /* 테이블 스크롤 */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { font-size: 11px; min-width: 500px; }
+  th, td { padding: 7px 8px; white-space: nowrap; }
+  /* 모달 전체 너비 */
+  .modal, .modal-lg { width: 100%; max-width: 100vw; max-height: 92vh; border-radius: 16px 16px 0 0; margin-top: auto; }
+  .overlay { align-items: flex-end; }
+  /* 폼 그리드 1열 */
+  .fgrid, .fgrid3 { grid-template-columns: 1fr !important; }
+  .span2 { grid-column: span 1; }
+  /* 카드 패딩 */
+  .card { padding: 13px; }
+  /* 섹션 헤더 */
+  .sh { margin-bottom: 10px; }
+  .stitle { font-size: 13px; }
+  /* 탭 스크롤 */
+  .tabs2 { overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+  .tab2 { padding: 8px 12px; font-size: 11px; display: inline-block; }
+  /* 버튼 축소 */
+  .btn-sm { padding: 4px 8px; font-size: 10px; }
+  /* c-value 크기 */
+  .c-value { font-size: 20px; }
+  /* 하단 탭바 */
+  #bottom-nav { display: flex !important; }
+}
+
+/* 하단 탭바 (모바일 전용) */
+#bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+  padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+}
+.bnav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  transition: color .15s;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+.bnav-item.active { color: var(--accent); }
+.bnav-item .bicon { font-size: 18px; line-height: 1; }
+
 </head>
 <body>
+
+<!-- BOTTOM NAV (모바일) -->
+<nav id="bottom-nav">
+  <button class="bnav-item active" data-page="dashboard"><span class="bicon">🏠</span>홈</button>
+  <button class="bnav-item" data-page="products"><span class="bicon">📦</span>상품</button>
+  <button class="bnav-item" data-page="inventory"><span class="bicon">🏭</span>재고</button>
+  <button class="bnav-item" data-page="costs"><span class="bicon">💸</span>비용</button>
+  <button class="bnav-item" data-page="analysis"><span class="bicon">📊</span>분석</button>
+  <button class="bnav-item" data-page="settings"><span class="bicon">⚙️</span>설정</button>
+</nav>
 
 <div id="loading"><div class="spin"></div>데이터 불러오는 중...</div>
 
@@ -179,9 +254,9 @@ select.fi{cursor:pointer;}
     <div class="h-title" id="htitle">대시보드</div>
     <div class="h-actions">
       <button id="theme-toggle" onclick="toggleTheme()" title="라이트/다크 모드 전환">🌙</button>
-      <button class="btn btn-ghost" onclick="gsSave()" title="구글 시트에 저장">☁️ 시트 저장</button>
-      <button class="btn btn-ghost" onclick="exportJSON()">💾 백업</button>
-      <button class="btn btn-ghost" onclick="document.getElementById('impFile').click()">📂 복원</button>
+      <button class="btn btn-ghost" onclick="gsSave()" title="구글 시트에 저장">☁️ <span class="hide-mobile">시트 저장</span></button>
+      <button class="btn btn-ghost" onclick="exportJSON()" title="백업">💾 <span class="hide-mobile">백업</span></button>
+      <button class="btn btn-ghost" onclick="document.getElementById('impFile').click()" title="복원">📂 <span class="hide-mobile">복원</span></button>
       <input type="file" id="impFile" accept=".json" style="display:none" onchange="importJSON(this)">
     </div>
   </div>
@@ -393,6 +468,7 @@ const pageTitles = {dashboard:'대시보드',products:'상품 관리',inventory:
 function navigate(page) {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
+  document.querySelectorAll('.bnav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
   document.getElementById('htitle').textContent = pageTitles[page];
   renderPage(page);
 }
@@ -1533,7 +1609,7 @@ function applyTheme() {
   }
 }
 
-document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.page)));
+document.querySelectorAll('.nav-item, .bnav-item').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.page)));
 document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{/* 바깥 클릭으로 닫기 비활성화 */}));
 
 const MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
