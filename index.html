@@ -157,11 +157,12 @@ tbody tr:last-child td{border-bottom:none;}
 <div class="overlay" id="m-stock"><div class="modal"><div class="mh"><span class="mt" id="mst-title">사입 입력</span><button class="close-btn" onclick="closeModal('m-stock')">×</button></div><div class="mb" id="mst-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-stock')">취소</button><button class="btn btn-primary" onclick="saveStock()">저장</button></div></div></div>
 <div class="overlay" id="m-cost"><div class="modal"><div class="mh"><span class="mt" id="mc-title">비용 추가</span><button class="close-btn" onclick="closeModal('m-cost')">×</button></div><div class="mb" id="mc-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-cost')">취소</button><button class="btn btn-primary" onclick="saveCost()">저장</button></div></div></div>
 <div class="overlay" id="m-ad"><div class="modal"><div class="mh"><span class="mt" id="mad-title">광고비 입력</span><button class="close-btn" onclick="closeModal('m-ad')">×</button></div><div class="mb" id="mad-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-ad')">취소</button><button class="btn btn-primary" onclick="saveAd()">저장</button></div></div></div>
-<div class="overlay" id="m-goal"><div class="modal"><div class="mh"><span class="mt">목표 설정</span><button class="close-btn" onclick="closeModal('m-goal')">×</button></div><div class="mb" id="mg-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-goal')">취소</button><button class="btn btn-primary" onclick="saveGoal()">저장</button></div></div></div>
+<div class="overlay" id="m-sourcing"><div class="modal"><div class="mh"><span class="mt" id="mso-title">소싱 후보 추가</span><button class="close-btn" onclick="closeModal('m-sourcing')">×</button></div><div class="mb" id="mso-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-sourcing')">취소</button><button class="btn btn-primary" onclick="saveSourcing()">저장</button></div></div></div>
+<div class="overlay" id="m-sourcing-confirm"><div class="modal"><div class="mh"><span class="mt">📦 사입 처리</span><button class="close-btn" onclick="closeModal('m-sourcing-confirm')">×</button></div><div class="mb" id="msc-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-sourcing-confirm')">취소</button><button class="btn btn-primary" onclick="confirmSourcing()">상품 등록 완료</button></div></div></div><div class="modal"><div class="mh"><span class="mt">목표 설정</span><button class="close-btn" onclick="closeModal('m-goal')">×</button></div><div class="mb" id="mg-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-goal')">취소</button><button class="btn btn-primary" onclick="saveGoal()">저장</button></div></div></div>
 
 <script>
 let db;
-let D={products:[],sales:[],stock:[],ads:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true,cnyRate:310,marginTarget:40}};
+let D={products:[],sales:[],stock:[],ads:[],sourcingCandidates:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true,cnyRate:310,marginTarget:40}};
 async function initDB(){return new Promise((res,rej)=>{const r=indexedDB.open('coupang_v2',1);r.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('kv'))e.target.result.createObjectStore('kv',{keyPath:'k'});};r.onsuccess=e=>{db=e.target.result;res();};r.onerror=rej;});}
 async function dbSave(){return new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put({k:'data',v:D});tx.oncomplete=res;});}
 async function dbLoad(){return new Promise(res=>{const tx=db.transaction('kv','readonly');const r=tx.objectStore('kv').get('data');r.onsuccess=e=>{if(e.target.result)D={...D,...e.target.result.v};res();};r.onerror=()=>res();});}
@@ -189,10 +190,10 @@ function totalProfit(){return D.sales.reduce((a,s)=>a+saleProfit(s),0);}
 function monthProfit(y,mo){return D.sales.filter(s=>{const d=new Date(s.date);return d.getFullYear()===y&&d.getMonth()===mo;}).reduce((a,s)=>a+saleProfit(s),0);}
 function pendingSettlement(){const now=new Date();return D.sales.filter(s=>settleDate(s)>now).reduce((a,s)=>a+saleRevenue(s),0);}
 
-let currentPage='home',openProdId=null,openProdTab={},costMode='base',editCostId=null,editProdId=null,saleProdId=null,stockProdId=null,stockEditId=null,extraCatFilter='',chartInstances={};
+let currentPage='home',openProdId=null,openProdTab={},costMode='base',editCostId=null,editProdId=null,saleProdId=null,stockProdId=null,stockEditId=null,extraCatFilter='',chartInstances={},productsSubTab='list',editSourcingId=null;
 
 function navigate(page){currentPage=page;document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));closeAllModals();render();}
-function closeAllModals(){['m-product','m-sale','m-stock','m-cost','m-ad','m-goal'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('open');});}
+function closeAllModals(){['m-product','m-sale','m-stock','m-cost','m-ad','m-goal','m-sourcing','m-sourcing-confirm'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('open');});}
 function render(){const pages={home:renderHome,products:renderProducts,costs:renderCosts,analysis:renderAnalysis,settings:renderSettings};document.getElementById('app').innerHTML=pages[currentPage]();if(currentPage==='home')setTimeout(renderHomeChart,50);if(currentPage==='analysis')setTimeout(renderAnalysisCharts,50);}
 
 function renderHome(){
@@ -228,6 +229,16 @@ function renderHomeChart(){
 }
 
 function renderProducts(){
+  return `
+  <!-- 이중 탭 -->
+  <div style="display:flex;background:var(--s2);border-radius:12px;padding:3px;margin-bottom:14px;gap:3px;">
+    <button onclick="productsSubTab='list';render()" style="flex:1;padding:8px;border-radius:9px;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;${productsSubTab==='list'?'background:var(--s1);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3);':'background:transparent;color:var(--muted);'}">📦 상품목록</button>
+    <button onclick="productsSubTab='sourcing';render()" style="flex:1;padding:8px;border-radius:9px;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;${productsSubTab==='sourcing'?'background:var(--s1);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3);':'background:transparent;color:var(--muted);'}">🔍 소싱계산기</button>
+  </div>
+  ${productsSubTab==='list' ? renderProductList() : renderSourcing()}`;
+}
+
+function renderProductList(){
   const now=new Date();
   return `
   <div class="sh"><div class="sh-title">상품 관리</div><button class="btn btn-primary btn-sm" onclick="openProdModal()">+ 상품 등록</button></div>
@@ -267,6 +278,190 @@ function switchProdTab(pid,tab){
   const c=document.getElementById(`pd-content-${pid}`);
   if(c)c.innerHTML=renderProdDetailContent(getProd(pid),tab);
 }
+// ===== SOURCING CALCULATOR =====
+const SOURCING_STATUS={review:{label:'검토중',color:'var(--muted)',bg:'var(--s3)'},planned:{label:'사입예정',color:'var(--yellow)',bg:'rgba(245,158,11,.15)'},confirmed:{label:'사입확정',color:'var(--green)',bg:'rgba(34,197,94,.15)'},excluded:{label:'제외',color:'var(--muted)',bg:'var(--s2)'}};
+
+function calcSourcingMargin(c){
+  const sp=c.sellingPrice||0,fee=sp*(c.feeRate||10.8)/100;
+  const logi=(c.logisticsCost||0)+(c.deliveryCost||0);
+  const pp=(c.cnyPrice||0)*getCnyRate();
+  const margin=sp-(fee+logi)*1.1-pp;
+  const mg=sp>0?margin/sp*100:0;
+  const er=margin>0?(sp/margin)*1.1*100:null;
+  const ceiling=sp-(fee+logi)*1.1-sp*getMarginTarget()/100;
+  return {margin,mg,er,pp,ceiling,ceilOk:pp<=ceiling};
+}
+
+function renderSourcing(){
+  const cands=D.sourcingCandidates||[];
+  const planned=cands.filter(c=>c.status==='planned'||c.status==='confirmed');
+  return `
+  <div class="sh">
+    <div class="sh-title">🔍 소싱 계산기</div>
+    <button class="btn btn-primary btn-sm" onclick="openSourcingModal()">+ 후보 추가</button>
+  </div>
+  ${planned.length>0?`
+  <div class="alert ag" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+    <span>사입예정/확정 상품 ${planned.length}개 있음</span>
+    <button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="openSourcingConfirmModal()">📦 사입 처리</button>
+  </div>`:''}
+  ${cands.length===0?`
+  <div class="empty-state">
+    <div class="ei">🔍</div>
+    <div class="et">소싱 후보가 없어요</div>
+    <div>사입 전 상품의 마진을 미리 계산해보세요</div>
+    <button class="btn btn-primary" style="margin-top:14px;" onclick="openSourcingModal()">후보 추가</button>
+  </div>`:`
+  ${cands.map(c=>{
+    const st=SOURCING_STATUS[c.status||'review'];
+    const {margin,mg,er,pp,ceiling,ceilOk}=calcSourcingMargin(c);
+    return `
+    <div class="card" style="margin-bottom:10px;border-color:${c.status==='planned'?'var(--yellow)':c.status==='confirmed'?'var(--green)':c.status==='excluded'?'var(--border)':'var(--border)'};opacity:${c.status==='excluded'?'0.5':'1'};">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${c.name}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.color};">${st.label}</span>
+            ${c.category?`<span class="tag tb">${c.category}</span>`:''}
+            ${c.note?`<span style="font-size:10px;color:var(--muted);">${c.note}</span>`:''}
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px;">
+          <select class="fi" style="padding:3px 6px;font-size:10px;width:auto;border-radius:6px;" onchange="setSourcingStatus('${c.id}',this.value)">
+            ${Object.entries(SOURCING_STATUS).map(([k,v])=>`<option value="${k}" ${(c.status||'review')===k?'selected':''}>${v.label}</option>`).join('')}
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="openSourcingModal('${c.id}')">수정</button>
+          <button class="btn btn-danger btn-sm" onclick="delSourcing('${c.id}')">삭제</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:8px;">
+        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">판매가 / 예상원가</div>
+          <div style="font-size:13px;font-weight:800;">₩${fmt(c.sellingPrice)} / ₩${fmt(pp)}</div>
+          ${c.cnyPrice?`<div style="font-size:10px;color:var(--muted);">¥${c.cnyPrice} × ${getCnyRate()}원</div>`:''}
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">단위마진 / 마진율</div>
+          <div style="font-size:13px;font-weight:800;" class="${nc(margin)}">₩${fmt(margin)} / ${fmtf(mg)}%${mg<getMarginTarget()?' ⚠️':''}</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">엔드 ROAS</div>
+          <div style="font-size:13px;font-weight:800;color:var(--blue);">${er?Math.round(er)+'%':'-'}</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">원가상한선 (${getMarginTarget()}%)</div>
+          <div style="font-size:13px;font-weight:800;" class="${ceilOk?'pos':'neg'}">₩${fmt(ceiling)} ${ceilOk?'✅':'❌'}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);display:flex;gap:12px;">
+        <span>수수료 ${c.feeRate||10.8}%</span>
+        <span>사입수량 ${c.qty||'-'}개</span>
+        ${c.logisticsCost||c.deliveryCost?`<span>입출고+배송 ₩${fmt((c.logisticsCost||0)+(c.deliveryCost||0))}</span>`:''}
+      </div>
+    </div>`;
+  }).join('')}`}`;
+}
+
+function setSourcingStatus(id,status){
+  const i=D.sourcingCandidates.findIndex(c=>c.id===id);
+  if(i>-1){D.sourcingCandidates[i].status=status;dbSave();render();}
+}
+function delSourcing(id){
+  if(!confirm('삭제하시겠습니까?'))return;
+  D.sourcingCandidates=D.sourcingCandidates.filter(c=>c.id!==id);
+  dbSave();render();
+}
+
+function openSourcingConfirmModal(){
+  const planned=(D.sourcingCandidates||[]).filter(c=>c.status==='planned'||c.status==='confirmed');
+  if(!planned.length){alert('사입예정 또는 사입확정 상품이 없습니다');return;}
+  const totalCny=planned.reduce((a,c)=>{
+    const pp=(c.cnyPrice||0)*(c.qty||1);return a+pp;
+  },0);
+  document.getElementById('msc-body').innerHTML=`
+  <div class="alert ai" style="margin-bottom:12px;">선택된 상품 ${planned.length}개의 실제 사입비용을 입력하세요.<br>총 위안가 합계: ¥${fmtf(totalCny,1)}</div>
+  <div style="margin-bottom:14px;">
+    ${planned.map(c=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+      <span style="font-weight:600;">${c.name}</span>
+      <span style="color:var(--muted);">¥${c.cnyPrice||0} × ${c.qty||1}개 = ¥${fmtf((c.cnyPrice||0)*(c.qty||1),1)}</span>
+    </div>`).join('')}
+  </div>
+  <div class="fg">
+    <label class="fl">총 지출액 (원) * — 물건값+운임+관세+부가세+수수료 전부 합산</label>
+    <input class="fi" id="sc-total" type="number" placeholder="예: 259167" oninput="calcSourcingRate()">
+  </div>
+  <div style="background:var(--s2);border-radius:10px;padding:12px;margin-top:8px;" id="sc-preview">
+    <div style="font-size:11px;color:var(--muted);">총 지출액 입력 시 실질 1위안 단가와 상품별 원가가 계산됩니다</div>
+  </div>`;
+  document.getElementById('m-sourcing-confirm').classList.add('open');
+}
+
+function calcSourcingRate(){
+  const total=parseFloat(document.getElementById('sc-total')?.value)||0;
+  const planned=(D.sourcingCandidates||[]).filter(c=>c.status==='planned'||c.status==='confirmed');
+  const totalCny=planned.reduce((a,c)=>a+(c.cnyPrice||0)*(c.qty||1),0);
+  const el=document.getElementById('sc-preview');
+  if(!total||!totalCny||!el)return;
+  const rate=total/totalCny;
+  el.innerHTML=`
+  <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+    <span style="font-size:11px;color:var(--muted);">실질 1위안 단가: </span>
+    <span style="font-size:14px;font-weight:800;color:var(--accent);">₩${fmtf(rate,1)}</span>
+    <span style="font-size:10px;color:var(--muted);margin-left:6px;">(예상 ${getCnyRate()}원 대비 ${fmtf(rate/getCnyRate()*100,0)}%)</span>
+  </div>
+  ${planned.map(c=>{
+    const realPP=(c.cnyPrice||0)*rate;
+    const sp=c.sellingPrice||0,fee=sp*(c.feeRate||10.8)/100;
+    const logi=(c.logisticsCost||0)+(c.deliveryCost||0);
+    const margin=sp-(fee+logi)*1.1-realPP;
+    const mg=sp>0?margin/sp*100:0;
+    return `<div style="font-size:12px;padding:5px 0;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-weight:600;">${c.name}</span>
+      <span>₩${fmt(realPP)} · 마진 ${fmtf(mg)}% <span class="${nc(margin)}">(${margin>=0?'+':'-'}₩${fmt(Math.abs(margin))})</span></span>
+    </div>`;
+  }).join('')}`;
+}
+
+function confirmSourcing(){
+  const total=parseFloat(document.getElementById('sc-total')?.value)||0;
+  if(!total){alert('총 지출액을 입력하세요');return;}
+  const planned=(D.sourcingCandidates||[]).filter(c=>c.status==='planned'||c.status==='confirmed');
+  const totalCny=planned.reduce((a,c)=>a+(c.cnyPrice||0)*(c.qty||1),0);
+  if(!totalCny){alert('사입 상품의 위안가와 수량을 확인하세요');return;}
+  const rate=total/totalCny;
+  planned.forEach(c=>{
+    const realPP=Math.round((c.cnyPrice||0)*rate);
+    const existing=D.products.find(p=>p.name===c.name);
+    if(existing){
+      existing.purchasePrice=realPP;
+      existing.cnyPrice=c.cnyPrice||0;
+    } else {
+      D.products.push({
+        id:uid(),name:c.name,category:c.category||'기타',
+        feeRate:c.feeRate||10.8,sellingPrice:c.sellingPrice||0,
+        purchasePrice:realPP,cnyPrice:c.cnyPrice||0,
+        sizeCategory:c.sizeCategory||'',
+        logisticsCost:c.logisticsCost||0,deliveryCost:c.deliveryCost||0,
+        settlementDays:14,note:c.note||''
+      });
+    }
+    // 재고 자동 등록
+    const pid=D.products.find(p=>p.name===c.name)?.id;
+    if(pid&&c.qty>0){
+      D.stock.push({id:uid(),productId:pid,qty:c.qty,type:'purchase',date:today(),note:`소싱 일괄 사입 (1위안=${fmtf(rate,1)}원)`});
+    }
+    // 상태 업데이트
+    const i=D.sourcingCandidates.findIndex(x=>x.id===c.id);
+    if(i>-1)D.sourcingCandidates[i].status='registered';
+  });
+  dbSave();
+  closeModal('m-sourcing-confirm');
+  productsSubTab='list';
+  alert(`✅ ${planned.length}개 상품이 등록됐습니다!\n실질 1위안 단가: ₩${fmtf(rate,1)}`);
+  render();
+}
+
 function renderProdDetail(p){
   const tab=openProdTab[p.id]||'sales';
   return `<div class="detail-tabs" id="pd-tabs-${p.id}">
@@ -705,6 +900,76 @@ function saveAd(){
 }
 function delAd(id){if(!confirm('삭제하시겠습니까?'))return;D.ads=D.ads.filter(a=>a.id!==id);dbSave();render();}
 
+// ===== SOURCING MODAL =====
+function openSourcingModal(id=null){
+  editSourcingId=id;
+  const c=id?(D.sourcingCandidates||[]).find(x=>x.id===id):null;
+  document.getElementById('mso-title').textContent=id?'소싱 후보 수정':'소싱 후보 추가';
+  document.getElementById('mso-body').innerHTML=`
+  <div class="fgrid">
+    <div class="fg span2"><label class="fl">상품명 *</label><input class="fi" id="so-name" value="${c?.name||''}" placeholder="예: 여권케이스 멀티포켓"></div>
+    <div class="fg">
+      <label class="fl">카테고리</label>
+      <select class="fi" id="so-cat" onchange="soAutoFee()">
+        ${Object.keys(FEES).map(k=>`<option value="${k}" ${c?.category===k?'selected':''}>${k} (${FEES[k]}%)</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg"><label class="fl">수수료율 (%)</label><input class="fi" id="so-fee" type="number" step="0.1" value="${c?.feeRate||10.8}"></div>
+    <div class="fg"><label class="fl">판매 예정가 (원) *</label><input class="fi" id="so-sp" type="number" value="${c?.sellingPrice||''}" placeholder="18900" oninput="soPreview()"></div>
+    <div class="fg"><label class="fl">위안화 원가 (¥) *</label><input class="fi" id="so-cny" type="number" step="0.1" value="${c?.cnyPrice||''}" placeholder="13.5" oninput="soPreview()"><div class="help">× ${getCnyRate()}원 예상원가 자동계산</div></div>
+    <div class="fg"><label class="fl">사입 예정 수량</label><input class="fi" id="so-qty" type="number" value="${c?.qty||''}" placeholder="30"></div>
+    <div class="fg">
+      <label class="fl">사이즈</label>
+      <select class="fi" id="so-size">
+        <option value="" ${!c?.sizeCategory?'selected':''}>미지정</option>
+        ${['극소형','소형','중형','대형','1특대형','2특대형'].map(v=>`<option value="${v}" ${c?.sizeCategory===v?'selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg"><label class="fl">입출고비 (원/개)</label><input class="fi" id="so-logi" type="number" value="${c?.logisticsCost||0}" oninput="soPreview()"></div>
+    <div class="fg"><label class="fl">배송비 (원/개)</label><input class="fi" id="so-delivery" type="number" value="${c?.deliveryCost||0}" oninput="soPreview()"></div>
+    <div class="fg span2"><label class="fl">메모</label><input class="fi" id="so-note" value="${c?.note||''}" placeholder="소싱처, 특이사항 등"></div>
+  </div>
+  <div class="preview-box" id="so-prev"><span style="color:var(--muted);font-size:12px;">판매가와 위안가 입력 시 마진이 계산됩니다</span></div>`;
+  document.getElementById('m-sourcing').classList.add('open');
+  soPreview();
+}
+function soAutoFee(){const cat=document.getElementById('so-cat')?.value;if(FEES[cat]){document.getElementById('so-fee').value=FEES[cat];soPreview();}}
+function soPreview(){
+  const sp=parseFloat(document.getElementById('so-sp')?.value)||0;
+  const cny=parseFloat(document.getElementById('so-cny')?.value)||0;
+  const fee=parseFloat(document.getElementById('so-fee')?.value)||10.8;
+  const logi=parseFloat(document.getElementById('so-logi')?.value)||0;
+  const delivery=parseFloat(document.getElementById('so-delivery')?.value)||0;
+  const el=document.getElementById('so-prev');if(!el)return;
+  if(!sp||!cny){el.innerHTML='<span style="color:var(--muted);font-size:12px;">판매가와 위안가 입력 시 마진이 계산됩니다</span>';return;}
+  const pp=cny*getCnyRate();
+  const feeAmt=sp*fee/100,logi2=logi+delivery,coupangCost=(feeAmt+logi2)*1.1;
+  const margin=sp-coupangCost-pp,mg=sp>0?margin/sp*100:0;
+  const er=margin>0?(sp/margin)*1.1*100:null;
+  const ceiling=sp-coupangCost-sp*getMarginTarget()/100;
+  const ceilOk=pp<=ceiling;
+  const pc=margin>=0?'var(--green)':'var(--red)';
+  el.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+    <div><div style="color:var(--muted);font-size:10px;margin-bottom:2px;">예상 원가 (×${getCnyRate()}원)</div><div style="font-weight:700;">₩${fmt(pp)}</div></div>
+    <div><div style="color:var(--muted);font-size:10px;margin-bottom:2px;">쿠팡비용(VAT포함)</div><div style="font-weight:700;">₩${fmt(coupangCost)}</div></div>
+    <div><div style="color:var(--muted);font-size:10px;margin-bottom:2px;">단위마진 / 마진율</div><div style="font-weight:800;color:${pc};">₩${fmt(margin)} / ${fmtf(mg)}%</div></div>
+    <div><div style="color:var(--muted);font-size:10px;margin-bottom:2px;">엔드 ROAS</div><div style="font-weight:800;color:var(--blue);">${er?Math.round(er)+'%':'-'}</div></div>
+    <div style="grid-column:span 2;padding-top:6px;border-top:1px solid var(--border);"><div style="color:var(--muted);font-size:10px;margin-bottom:2px;">원가 상한선 (${getMarginTarget()}%) ${ceilOk?'✅ 적합':'❌ 초과'}</div><div style="font-weight:700;color:${ceilOk?'var(--green)':'var(--red)'};">₩${fmt(ceiling)} (여유 ${ceilOk?'+':'-'}₩${fmt(Math.abs(ceiling-pp))})</div></div>
+  </div>`;
+}
+function saveSourcing(){
+  const name=document.getElementById('so-name')?.value.trim();
+  const sp=parseFloat(document.getElementById('so-sp')?.value)||0;
+  const cny=parseFloat(document.getElementById('so-cny')?.value)||0;
+  if(!name){alert('상품명을 입력하세요');return;}
+  if(!sp||!cny){alert('판매가와 위안가를 입력하세요');return;}
+  const data={name,category:document.getElementById('so-cat').value,feeRate:parseFloat(document.getElementById('so-fee').value)||10.8,sellingPrice:sp,cnyPrice:cny,qty:parseInt(document.getElementById('so-qty').value)||0,sizeCategory:document.getElementById('so-size').value,logisticsCost:parseFloat(document.getElementById('so-logi').value)||0,deliveryCost:parseFloat(document.getElementById('so-delivery').value)||0,note:document.getElementById('so-note').value.trim(),status:'review'};
+  if(!D.sourcingCandidates)D.sourcingCandidates=[];
+  if(editSourcingId){const i=D.sourcingCandidates.findIndex(c=>c.id===editSourcingId);if(i>-1)D.sourcingCandidates[i]={...D.sourcingCandidates[i],...data};}
+  else D.sourcingCandidates.push({id:uid(),...data});
+  dbSave();closeModal('m-sourcing');render();
+}
+
 // ===== GOAL MODAL =====
 function openGoalModal(){
   document.getElementById('mg-body').innerHTML=`<div class="fg"><label class="fl">이번달 목표 순수익 (원)</label><input class="fi" id="g-monthly" type="number" value="${D.goals.monthlyTarget||''}" placeholder="1000000"></div><div class="fg"><label class="fl">총 목표 순수익 (원)</label><input class="fi" id="g-total" type="number" value="${D.goals.totalTarget||''}" placeholder="누적 목표"></div><div class="fg"><label class="fl">사업 시작일</label><input class="fi" id="g-start" type="date" value="${D.goals.startDate||''}"></div>`;
@@ -716,7 +981,7 @@ function closeModal(id){document.getElementById(id).classList.remove('open');}
 function exportJSON(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],{type:'application/json'}));a.download=`coupang_backup_${today()}.json`;a.click();}
 function importJSON(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const data=JSON.parse(e.target.result);if(!confirm('현재 데이터를 덮어씁니다.'))return;D={...D,...data};dbSave();render();alert('✅ 불러왔습니다!');}catch{alert('파일 형식이 올바르지 않습니다');}};r.readAsText(file);input.value='';}
 function exportCSV(){const h=['날짜','상품명','판매가','판매','반품','매출','광고비','ROAS','순수익'];const rows=D.sales.map(s=>{const p=getProd(s.productId);const sp=s.sellingPrice||p?.sellingPrice||0;const roas=s.adCost>0?((s.adSales||0)/s.adCost*100).toFixed(1):'';return[s.date,p?.name||'',sp,s.qty,s.returnQty||0,sp*((s.qty||0)-(s.returnQty||0)),s.adCost||0,roas,saleProfit(s)];});const csv=[h,...rows].map(r=>r.join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`coupang_sales_${today()}.csv`;a.click();}
-function resetAll(){if(!confirm('정말 모든 데이터를 삭제하시겠습니까?'))return;D={products:[],sales:[],stock:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true,cnyRate:310,marginTarget:40}};dbSave();render();}
+function resetAll(){if(!confirm('정말 모든 데이터를 삭제하시겠습니까?'))return;D={products:[],sales:[],stock:[],ads:[],sourcingCandidates:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true,cnyRate:310,marginTarget:40}};dbSave();render();}
 
 function saveGsUrl(){const url=document.getElementById('gs-url')?.value.trim();if(!url){alert('URL을 입력하세요');return;}if(!url.includes('script.google.com')){alert('올바른 URL이 아닙니다');return;}localStorage.setItem('gsScriptUrl',url);render();alert('✅ URL 저장됐습니다!');}
 async function gsSave(){const url=localStorage.getItem('gsScriptUrl');if(!url){alert('설정에서 Apps Script URL을 입력하세요');navigate('settings');return;}try{await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(D),mode:'no-cors'});const now=new Date().toLocaleString('ko-KR');localStorage.setItem('gsLastSync',now);alert('✅ 구글 시트에 저장됐습니다!\n'+now);}catch(e){alert('❌ 저장 실패: '+e.message);}}
