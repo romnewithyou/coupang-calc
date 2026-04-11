@@ -332,9 +332,10 @@ function settleDate(s) {
   return d;
 }
 function stockLevel(pid) {
-  const bought = D.stock.filter(s=>s.productId===pid).reduce((a,s)=>a+(s.qty||0),0);
+  const bought = D.stock.filter(s=>s.productId===pid&&s.type!=='disposal').reduce((a,s)=>a+(s.qty||0),0);
   const sold = D.sales.filter(s=>s.productId===pid).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);
-  return bought - sold;
+  const disposed = D.stock.filter(s=>s.productId===pid&&s.type==='disposal').reduce((a,s)=>a+(s.qty||0),0);
+  return bought - sold - disposed;
 }
 function totalInvested() {
   const now = new Date();
@@ -595,15 +596,16 @@ function renderInventory() {
     <div class="tbl-wrap">
       <table>
         <thead><tr>
-          <th>상품명</th><th>사입(누적)</th><th>판매</th><th>반품</th>
-          <th>현재 재고</th><th>일평균 판매</th><th>소진 예상일</th><th>사입 입력</th>
+          <th>상품명</th><th>사입(누적)</th><th>판매</th><th>반품</th><th>폐기</th>
+          <th>현재 재고</th><th>일평균 판매</th><th>소진 예상일</th><th>관리</th>
         </tr></thead>
         <tbody>
         ${D.products.map(p => {
-          const bought = D.stock.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.qty||0),0);
+          const bought = D.stock.filter(s=>s.productId===p.id&&s.type!=='disposal').reduce((a,s)=>a+(s.qty||0),0);
           const sold = D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.qty||0),0);
           const ret = D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+(s.returnQty||0),0);
-          const stk = bought - sold + ret;
+          const disposed = D.stock.filter(s=>s.productId===p.id&&s.type==='disposal').reduce((a,s)=>a+(s.qty||0),0);
+          const stk = bought - sold + ret - disposed;
           const d30 = new Date(); d30.setDate(d30.getDate()-30);
           const r30 = D.sales.filter(s=>s.productId===p.id&&new Date(s.date)>=d30).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);
           const avg = r30/30;
@@ -614,10 +616,16 @@ function renderInventory() {
             <td>${fmt(bought)}개</td>
             <td>${fmt(sold)}개</td>
             <td>${fmt(ret)}개</td>
+            <td class="${disposed>0?'neg':''}">${disposed>0?disposed+'개':'-'}</td>
             <td class="${stk<0?'neg':stk<20?'neg':''}">${stk}개${stk<0?' ⚠️ 마이너스':stk<20?' ⚠️ 부족':''}</td>
             <td>${avg>0?fmtf(avg,1)+'개':'-'}</td>
             <td>${deplDate?`<span class="tag ${dl<14?'tr':'ty'}">${deplDate.toLocaleDateString('ko-KR')} (~${dl}일)</span>`:'-'}</td>
-            <td><button class="btn btn-ghost btn-sm" onclick="openStockModal('${p.id}')">+ 사입 입력</button></td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-ghost btn-sm" onclick="openStockModal('${p.id}')">+ 사입</button>
+                <button class="btn btn-sm" style="background:transparent;border:1px solid var(--yellow);color:var(--yellow);" onclick="openDisposalModal('${p.id}')">🗑 폐기</button>
+              </div>
+            </td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -1203,6 +1211,18 @@ function openStockModal(pid) {
   <div class="fg"><label class="fl">메모</label><input class="fi" id="ck-note" placeholder="배치번호, 공급처 등"></div>`;
   document.getElementById('m-cost').classList.add('open');
 }
+function openDisposalModal(pid) {
+  const p=getProd(pid);
+  const stk=stockLevel(pid);
+  costMode='disposal'; editCostId=pid;
+  document.getElementById('m-cost-title').textContent=`재고 폐기 — ${p.name}`;
+  document.getElementById('m-cost-body').innerHTML=`
+  <div class="alert aw" style="margin-bottom:12px;">현재 재고: <strong>${stk}개</strong> · 불량품, 손상 등으로 판매 불가한 수량을 입력하세요.</div>
+  <div class="fg"><label class="fl">폐기 날짜 *</label><input class="fi" id="ck-date" type="date" value="${today()}"></div>
+  <div class="fg"><label class="fl">폐기 수량 *</label><input class="fi" id="ck-qty" type="number" min="1" max="${stk}" placeholder="예: 10"></div>
+  <div class="fg"><label class="fl">폐기 사유</label><input class="fi" id="ck-note" placeholder="불량, 파손, 유통기한 등"></div>`;
+  document.getElementById('m-cost').classList.add('open');
+}
 
 // ===================== COST MODAL =====================
 function openCostModal(type, id=null) {
@@ -1244,10 +1264,14 @@ function openCostModal(type, id=null) {
   document.getElementById('m-cost').classList.add('open');
 }
 function saveCost() {
-  if(costMode==='stock') {
+  if(costMode==='stock'||costMode==='disposal') {
     const qty=parseInt(document.getElementById('ck-qty')?.value)||0;
     if(!qty){alert('수량을 입력하세요');return;}
-    D.stock.push({id:uid(),productId:editCostId,qty,date:document.getElementById('ck-date')?.value||'',note:document.getElementById('ck-note')?.value||''});
+    if(costMode==='disposal'){
+      const stk=stockLevel(editCostId);
+      if(qty>stk){alert(`폐기 수량(${qty}개)이 현재 재고(${stk}개)를 초과합니다.`);return;}
+    }
+    D.stock.push({id:uid(),productId:editCostId,qty,type:costMode==='disposal'?'disposal':'purchase',date:document.getElementById('ck-date')?.value||'',note:document.getElementById('ck-note')?.value||''});
     dbSave(); closeModal('m-cost'); renderPage(currentPage); return;
   }
   const name=document.getElementById('ck-name')?.value.trim();
