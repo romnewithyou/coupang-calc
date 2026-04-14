@@ -298,73 +298,133 @@ function calcSourcingMargin(c){
 }
 
 function renderSourcing(){
-  const cands=D.sourcingCandidates||[];
+  if(!D.sourcingCandidates)D.sourcingCandidates=[];
+  const cands=D.sourcingCandidates;
   const planned=cands.filter(c=>c.status==='planned'||c.status==='confirmed');
+  const STATUS_DOT={
+    review:  {dot:'#6b7a99',label:'검토중'},
+    planned: {dot:'#f59e0b',label:'사입예정'},
+    confirmed:{dot:'#22c55e',label:'사입확정'},
+    excluded:{dot:'#374151',label:'제외'}
+  };
   return `
   <div class="sh">
     <div class="sh-title">🔍 소싱 계산기</div>
-    <button class="btn btn-primary btn-sm" onclick="openSourcingModal()">+ 후보 추가</button>
+    <div style="display:flex;gap:6px;">
+      ${planned.length>0?`<button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="openSourcingConfirmModal()">📦 사입처리 (${planned.length})</button>`:''}
+      <button class="btn btn-primary btn-sm" onclick="addSourcingRow()">+ 추가</button>
+    </div>
   </div>
-  ${planned.length>0?`
-  <div class="alert ag" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
-    <span>사입예정/확정 상품 ${planned.length}개 있음</span>
-    <button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="openSourcingConfirmModal()">📦 사입 처리</button>
-  </div>`:''}
+
+  <!-- 범례 -->
+  <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+    ${Object.entries(STATUS_DOT).map(([k,v])=>`<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);"><div style="width:8px;height:8px;border-radius:50%;background:${v.dot};"></div>${v.label}</div>`).join('')}
+    <div style="margin-left:auto;font-size:10px;color:var(--muted);">행 클릭 → 상세편집 · 상태점 클릭 → 상태변경</div>
+  </div>
+
   ${cands.length===0?`
-  <div class="empty-state">
-    <div class="ei">🔍</div>
-    <div class="et">소싱 후보가 없어요</div>
-    <div>사입 전 상품의 마진을 미리 계산해보세요</div>
-    <button class="btn btn-primary" style="margin-top:14px;" onclick="openSourcingModal()">후보 추가</button>
+  <div style="text-align:center;padding:48px 20px;color:var(--muted);">
+    <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">소싱 후보가 없어요</div>
+    <div style="font-size:11px;">키워드만 입력해도 후보로 등록할 수 있어요</div>
+    <button class="btn btn-primary" style="margin-top:14px;" onclick="addSourcingRow()">첫 후보 추가</button>
   </div>`:`
-  ${cands.map(c=>{
-    const st=SOURCING_STATUS[c.status||'review'];
-    const {margin,mg,er,pp,ceiling,ceilOk}=calcSourcingMargin(c);
-    return `
-    <div class="card" style="margin-bottom:10px;border-color:${c.status==='planned'?'var(--yellow)':c.status==='confirmed'?'var(--green)':c.status==='excluded'?'var(--border)':'var(--border)'};opacity:${c.status==='excluded'?'0.5':'1'};">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${c.name}</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
-            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.color};">${st.label}</span>
-            ${c.category?`<span class="tag tb">${c.category}</span>`:''}
-            ${c.note?`<span style="font-size:10px;color:var(--muted);">${c.note}</span>`:''}
-          </div>
+
+  <!-- 테이블 -->
+  <div style="background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden;">
+    <!-- 헤더 -->
+    <div style="display:grid;grid-template-columns:28px 1fr 70px 70px 70px 60px 64px 64px 64px 32px;gap:0;background:var(--s2);border-bottom:1px solid var(--border);padding:0 12px;">
+      ${['','키워드','¥원가','판매가','예상원가','수수료','마진율','엔드ROAS','원가상한선',''].map((h,i)=>`<div style="padding:8px 4px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;${i===1?'':'text-align:center;'}">${h}</div>`).join('')}
+    </div>
+
+    <!-- 행들 -->
+    ${cands.map((c,idx)=>{
+      const {margin,mg,er,pp,ceiling,ceilOk}=calcSourcingMargin(c);
+      const st=STATUS_DOT[c.status||'review'];
+      const isExcluded=c.status==='excluded';
+      const rowBg=c.status==='planned'?'rgba(245,158,11,.06)':c.status==='confirmed'?'rgba(34,197,94,.06)':'transparent';
+      const shortNote=c.note&&c.note.length>15?c.note.slice(0,15)+'…':c.note||'';
+      return `
+      <div style="display:grid;grid-template-columns:28px 1fr 70px 70px 70px 60px 64px 64px 64px 32px;gap:0;padding:0 12px;border-bottom:1px solid var(--border);background:${rowBg};opacity:${isExcluded?0.4:1};transition:background .15s;cursor:pointer;"
+           onmouseenter="this.style.background='${isExcluded?rowBg:'var(--s2)'}'"
+           onmouseleave="this.style.background='${rowBg}'"
+           onclick="openSourcingModal('${c.id}')">
+
+        <!-- 상태 점 -->
+        <div style="display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();cycleSourcingStatus('${c.id}')">
+          <div title="${st.label}. 클릭해서 변경" style="width:10px;height:10px;border-radius:50%;background:${st.dot};cursor:pointer;transition:transform .15s;" onmouseenter="this.style.transform='scale(1.4)'" onmouseleave="this.style.transform='scale(1)'"></div>
         </div>
-        <div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px;">
-          <select class="fi" style="padding:3px 6px;font-size:10px;width:auto;border-radius:6px;" onchange="setSourcingStatus('${c.id}',this.value)">
-            ${Object.entries(SOURCING_STATUS).map(([k,v])=>`<option value="${k}" ${(c.status||'review')===k?'selected':''}>${v.label}</option>`).join('')}
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="openSourcingModal('${c.id}')">수정</button>
-          <button class="btn btn-danger btn-sm" onclick="delSourcing('${c.id}')">삭제</button>
+
+        <!-- 키워드 + 메모 -->
+        <div style="padding:10px 4px;min-width:0;">
+          <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name||'<span style="color:var(--muted);">이름 없음</span>'}</div>
+          ${shortNote?`<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${c.note}">${shortNote}</div>`:''}
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:8px;">
-        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
-          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">판매가 / 예상원가</div>
-          <div style="font-size:13px;font-weight:800;">₩${fmt(c.sellingPrice)} / ₩${fmt(pp)}</div>
-          ${c.cnyPrice?`<div style="font-size:10px;color:var(--muted);">¥${c.cnyPrice} × ${getCnyRate()}원</div>`:''}
+
+        <!-- 위안가 -->
+        <div style="padding:10px 4px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);">${c.cnyPrice?`¥${c.cnyPrice}`:'-'}</div>
+
+        <!-- 판매가 -->
+        <div style="padding:10px 4px;text-align:center;font-size:12px;font-weight:600;">${c.sellingPrice?`₩${fmt(c.sellingPrice)}`:'-'}</div>
+
+        <!-- 예상원가 -->
+        <div style="padding:10px 4px;text-align:center;font-size:12px;color:var(--muted);">${pp>0?`₩${fmt(pp)}`:'-'}</div>
+
+        <!-- 수수료 -->
+        <div style="padding:10px 4px;text-align:center;font-size:11px;color:var(--muted);">${c.feeRate||10.8}%</div>
+
+        <!-- 마진율 -->
+        <div style="padding:10px 4px;text-align:center;font-size:12px;font-weight:800;" class="${mg>0?nc(mg):''}">
+          ${mg&&c.sellingPrice&&c.cnyPrice?`${fmtf(mg)}%${mg<getMarginTarget()?' ⚠️':''}`:'-'}
         </div>
-        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
-          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">단위마진 / 마진율</div>
-          <div style="font-size:13px;font-weight:800;" class="${nc(margin)}">₩${fmt(margin)} / ${fmtf(mg)}%${mg<getMarginTarget()?' ⚠️':''}</div>
+
+        <!-- 엔드ROAS -->
+        <div style="padding:10px 4px;text-align:center;font-size:12px;font-weight:800;color:${er?'var(--blue)':'var(--muted)'};">
+          ${er?Math.round(er)+'%':'-'}
         </div>
-        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
-          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">엔드 ROAS</div>
-          <div style="font-size:13px;font-weight:800;color:var(--blue);">${er?Math.round(er)+'%':'-'}</div>
+
+        <!-- 원가상한선 -->
+        <div style="padding:10px 4px;text-align:center;font-size:11px;" class="${pp>0&&c.sellingPrice?ceilOk?'pos':'neg':''}">
+          ${pp>0&&c.sellingPrice?`₩${fmt(ceiling)}<br><span style="font-size:9px;">${ceilOk?'✅':'-₩'+fmt(pp-ceiling)}</span>`:'-'}
         </div>
-        <div style="background:var(--s2);border-radius:8px;padding:8px 10px;">
-          <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:3px;">원가상한선 (${getMarginTarget()}%)</div>
-          <div style="font-size:13px;font-weight:800;" class="${ceilOk?'pos':'neg'}">₩${fmt(ceiling)} ${ceilOk?'✅':'❌'}</div>
+
+        <!-- 삭제 -->
+        <div style="display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();delSourcing('${c.id}')">
+          <span style="font-size:14px;color:var(--muted);cursor:pointer;padding:4px;" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--muted)'">×</span>
         </div>
-      </div>
-      <div style="font-size:10px;color:var(--muted);display:flex;gap:12px;">
-        <span>수수료 ${c.feeRate||10.8}%</span>
-        <span>사입수량 ${c.qty||'-'}개</span>
-        ${c.logisticsCost||c.deliveryCost?`<span>입출고+배송 ₩${fmt((c.logisticsCost||0)+(c.deliveryCost||0))}</span>`:''}
-      </div>
-    </div>`;
-  }).join('')}`}`;
+      </div>`;
+    }).join('')}
+
+    <!-- 빠른 추가 행 -->
+    <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;border-top:1px dashed var(--border);">
+      <div style="width:10px;height:10px;border-radius:50%;background:var(--s3);flex-shrink:0;"></div>
+      <input id="quick-add-input" class="fi" style="flex:1;padding:5px 8px;font-size:12px;border-radius:7px;border-color:transparent;background:transparent;" placeholder="+ 키워드 입력 후 Enter (빠른추가)" onkeydown="if(event.key==='Enter')quickAddSourcing()">
+      <button class="btn btn-ghost btn-sm" onclick="quickAddSourcing()">추가</button>
+    </div>
+  </div>
+  `}`;
+}
+
+function cycleSourcingStatus(id){
+  const order=['review','planned','confirmed','excluded','review'];
+  const c=(D.sourcingCandidates||[]).find(x=>x.id===id);
+  if(!c)return;
+  const cur=c.status||'review';
+  const next=order[order.indexOf(cur)+1]||'review';
+  const i=D.sourcingCandidates.findIndex(x=>x.id===id);
+  D.sourcingCandidates[i].status=next;
+  dbSave();render();
+}
+
+function quickAddSourcing(){
+  const el=document.getElementById('quick-add-input');
+  const name=el?.value.trim();
+  if(!name)return;
+  if(!D.sourcingCandidates)D.sourcingCandidates=[];
+  D.sourcingCandidates.push({id:uid(),name,status:'review',cnyPrice:0,sellingPrice:0,feeRate:10.8,logisticsCost:0,deliveryCost:0,qty:0,note:''});
+  dbSave();render();
+  // 포커스 유지
+  setTimeout(()=>{const inp=document.getElementById('quick-add-input');if(inp)inp.focus();},50);
 }
 
 function setSourcingStatus(id,status){
@@ -906,6 +966,7 @@ function saveAd(){
 function delAd(id){if(!confirm('삭제하시겠습니까?'))return;D.ads=D.ads.filter(a=>a.id!==id);dbSave();render();}
 
 // ===== SOURCING MODAL =====
+function addSourcingRow(){openSourcingModal();}
 function openSourcingModal(id=null){
   editSourcingId=id;
   const c=id?(D.sourcingCandidates||[]).find(x=>x.id===id):null;
@@ -964,11 +1025,8 @@ function soPreview(){
 }
 function saveSourcing(){
   const name=document.getElementById('so-name')?.value.trim();
-  const sp=parseFloat(document.getElementById('so-sp')?.value)||0;
-  const cny=parseFloat(document.getElementById('so-cny')?.value)||0;
-  if(!name){alert('상품명을 입력하세요');return;}
-  if(!sp||!cny){alert('판매가와 위안가를 입력하세요');return;}
-  const data={name,category:document.getElementById('so-cat').value,feeRate:parseFloat(document.getElementById('so-fee').value)||10.8,sellingPrice:sp,cnyPrice:cny,qty:parseInt(document.getElementById('so-qty').value)||0,sizeCategory:document.getElementById('so-size').value,logisticsCost:parseFloat(document.getElementById('so-logi').value)||0,deliveryCost:parseFloat(document.getElementById('so-delivery').value)||0,note:document.getElementById('so-note').value.trim(),status:'review'};
+  if(!name){alert('키워드(상품명)를 입력하세요');return;}
+  const data={name,category:document.getElementById('so-cat').value,feeRate:parseFloat(document.getElementById('so-fee').value)||10.8,sellingPrice:parseFloat(document.getElementById('so-sp').value)||0,cnyPrice:parseFloat(document.getElementById('so-cny').value)||0,qty:parseInt(document.getElementById('so-qty').value)||0,sizeCategory:document.getElementById('so-size').value,logisticsCost:parseFloat(document.getElementById('so-logi').value)||0,deliveryCost:parseFloat(document.getElementById('so-delivery').value)||0,note:document.getElementById('so-note').value.trim(),status:'review'};
   if(!D.sourcingCandidates)D.sourcingCandidates=[];
   if(editSourcingId){const i=D.sourcingCandidates.findIndex(c=>c.id===editSourcingId);if(i>-1)D.sourcingCandidates[i]={...D.sourcingCandidates[i],...data};}
   else D.sourcingCandidates.push({id:uid(),...data});
