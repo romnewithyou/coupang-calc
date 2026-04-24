@@ -186,7 +186,22 @@ const EXTRA_CATS=['포장비','마케팅비','광고비','인건비','배송비'
 function unitProfit(p,sp){sp=sp||p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);return sp-(fee+logi)*1.1-(p.purchasePrice||0);}
 function calcEndRoas(p){const sp=p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);const margin=sp-(fee+logi)*1.1-(p.purchasePrice||0);return margin>0?(sp/margin)*1.1*100:null;}
 function calcCostCeiling(p,tm){const sp=p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);return sp-(fee+logi)*1.1-sp*tm/100;}
-function saleProfit(s){const p=getProd(s.productId);if(!p)return 0;const sp=s.sellingPrice||p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);const margin=sp-(fee+logi)*1.1-(p.purchasePrice||0);return margin*((s.qty||0)-(s.returnQty||0))-(s.adCost||0);}
+// 판매 레코드에 adCost가 없으면 D.ads에서 자동 조회 (같은 날 첫 번째 판매에만 적용)
+function resolveAdCost(s){
+  if(s.adCost>0)return s.adCost;
+  const adRec=D.ads.find(a=>a.productId===s.productId&&a.date===s.date);
+  if(!adRec)return 0;
+  const daySales=D.sales.filter(x=>x.productId===s.productId&&x.date===s.date);
+  return daySales.length===0||daySales[0].id===s.id?adRec.cost:0;
+}
+function resolveAdSales(s){
+  if(s.adSales>0)return s.adSales;
+  const adRec=D.ads.find(a=>a.productId===s.productId&&a.date===s.date);
+  if(!adRec)return 0;
+  const daySales=D.sales.filter(x=>x.productId===s.productId&&x.date===s.date);
+  return daySales.length===0||daySales[0].id===s.id?adRec.sales:0;
+}
+function saleProfit(s){const p=getProd(s.productId);if(!p)return 0;const sp=s.sellingPrice||p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);const margin=sp-(fee+logi)*1.1-(p.purchasePrice||0);return margin*((s.qty||0)-(s.returnQty||0))-resolveAdCost(s);}
 function saleRevenue(s){const p=getProd(s.productId);if(!p)return 0;const sp=s.sellingPrice||p.sellingPrice||0;return sp*((s.qty||0)-(s.returnQty||0));}
 function settleDate(s){const p=getProd(s.productId);const d=new Date(s.date);d.setDate(d.getDate()+(p?.settlementDays||14));return d;}
 function stockLevel(pid){const bought=D.stock.filter(s=>s.productId===pid&&s.type!=='disposal').reduce((a,s)=>a+(s.qty||0),0);const sold=D.sales.filter(s=>s.productId===pid).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);const disposed=D.stock.filter(s=>s.productId===pid&&s.type==='disposal').reduce((a,s)=>a+(s.qty||0),0);return bought-sold-disposed;}
@@ -573,9 +588,10 @@ function renderProdSales(p){
     <thead><tr><th>날짜</th><th>판매가</th><th>판매</th><th>반품</th><th>광고비</th><th>ROAS</th><th>순수익</th><th></th></tr></thead>
     <tbody>${sales.map(s=>{
       const prof=saleProfit(s);
-      const roas=s.adCost>0?((s.adSales||0)/s.adCost*100).toFixed(0)+'%':'-';
+      const adCost=resolveAdCost(s),adSales=resolveAdSales(s);
+      const roas=adCost>0?(adSales/adCost*100).toFixed(0)+'%':'-';
       const adLinked=D.ads.some(a=>a.productId===p.id&&a.date===s.date);
-      const adCell=s.adCost?`₩${fmt(s.adCost)}${adLinked?'<span title="광고탭 연동됨" style="font-size:9px;color:var(--green);margin-left:3px;">⚡</span>':''}`:'-';
+      const adCell=adCost?`₩${fmt(adCost)}${adLinked?'<span title="광고탭 연동됨" style="font-size:9px;color:var(--green);margin-left:3px;">⚡</span>':''}`:'-';
       return `<tr><td>${s.date}</td><td>₩${fmt(s.sellingPrice||p.sellingPrice)}</td><td>${s.qty}</td><td>${s.returnQty||0}</td><td>${adCell}</td><td>${roas}</td><td class="${nc(prof)}">${prof<0?'-':''}₩${fmt(Math.abs(prof))}</td><td><button class="btn btn-danger btn-sm" onclick="delSale('${s.id}')">삭제</button></td></tr>`;
     }).join('')}</tbody>
   </table></div>`}`;
@@ -937,16 +953,30 @@ function saveProduct(){
 }
 function delProd(id){if(!confirm('삭제 시 관련 판매/재고 내역도 삭제됩니다.'))return;D.products=D.products.filter(p=>p.id!==id);D.sales=D.sales.filter(s=>s.productId!==id);D.stock=D.stock.filter(s=>s.productId!==id);if(openProdId===id)openProdId=null;dbSave();render();}
 
+function fillAdFromDate(pid,date){
+  const ad=D.ads.find(a=>a.productId===pid&&a.date===date);
+  const ec=document.getElementById('s-adcost'),es=document.getElementById('s-adsales'),eh=document.getElementById('s-ad-hint');
+  if(ad){
+    if(ec)ec.value=ad.cost||0;
+    if(es)es.value=ad.sales||0;
+    if(eh){eh.textContent='⚡ 광고 탭 데이터 자동 불러옴';eh.style.color='var(--green)';}
+  } else {
+    if(ec)ec.value=0;
+    if(es)es.value=0;
+    if(eh){eh.textContent='';eh.style.color='';}
+  }
+}
 function openSaleModal(pid){
   saleProdId=pid;const p=getProd(pid);
+  const todayAd=D.ads.find(a=>a.productId===pid&&a.date===today());
   document.getElementById('ms-title').textContent=`판매 입력 — ${p.name}`;
   document.getElementById('ms-body').innerHTML=`<div class="fgrid">
-    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${today()}"></div>
+    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${today()}" onchange="fillAdFromDate('${pid}',this.value)"></div>
     <div class="fg"><label class="fl">판매가 (원)</label><input class="fi" id="s-sp" type="number" value="${p.sellingPrice||''}"><div class="help">비우면 등록가 적용</div></div>
     <div class="fg"><label class="fl">판매 수량 *</label><input class="fi" id="s-qty" type="number" min="0" value="1"></div>
     <div class="fg"><label class="fl">반품 수량</label><input class="fi" id="s-ret" type="number" min="0" value="0"></div>
-    <div class="fg"><label class="fl">광고비 (원)</label><input class="fi" id="s-adcost" type="number" min="0" value="0"></div>
-    <div class="fg"><label class="fl">광고 매출 (원)</label><input class="fi" id="s-adsales" type="number" min="0" value="0"><div class="help">ROAS 계산용</div></div>
+    <div class="fg"><label class="fl">광고비 (원)</label><input class="fi" id="s-adcost" type="number" min="0" value="${todayAd?.cost||0}"><div class="help" id="s-ad-hint" style="${todayAd?'color:var(--green);':''}">${todayAd?'⚡ 광고 탭 데이터 자동 불러옴':''}</div></div>
+    <div class="fg"><label class="fl">광고 매출 (원)</label><input class="fi" id="s-adsales" type="number" min="0" value="${todayAd?.sales||0}"><div class="help">ROAS 계산용</div></div>
     <div class="fg span2"><label class="fl">메모</label><input class="fi" id="s-note" placeholder="특이사항"></div>
   </div>`;
   document.getElementById('m-sale').classList.add('open');
