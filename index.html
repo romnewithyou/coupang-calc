@@ -164,6 +164,7 @@ tbody tr:last-child td{border-bottom:none;}
 <div class="overlay" id="m-sourcing"><div class="modal"><div class="mh"><span class="mt" id="mso-title">소싱 후보 추가</span><button class="close-btn" onclick="closeModal('m-sourcing')">×</button></div><div class="mb" id="mso-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-sourcing')">취소</button><button class="btn btn-primary" onclick="saveSourcing()">저장</button></div></div></div>
 <div class="overlay" id="m-sourcing-confirm"><div class="modal"><div class="mh"><span class="mt">📦 사입 처리</span><button class="close-btn" onclick="closeModal('m-sourcing-confirm')">×</button></div><div class="mb" id="msc-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-sourcing-confirm')">취소</button><button class="btn btn-primary" onclick="confirmSourcing()">상품 등록 완료</button></div></div></div>
 <div class="overlay" id="m-goal"><div class="modal"><div class="mh"><span class="mt">목표 설정</span><button class="close-btn" onclick="closeModal('m-goal')">×</button></div><div class="mb" id="mg-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-goal')">취소</button><button class="btn btn-primary" onclick="saveGoal()">저장</button></div></div></div>
+<div class="overlay" id="m-return"><div class="modal"><div class="mh"><span class="mt" id="mr-title">반품 입력</span><button class="close-btn" onclick="closeModal('m-return')">×</button></div><div class="mb" id="mr-body"></div><div class="mf"><button class="btn btn-ghost" onclick="closeModal('m-return')">취소</button><button class="btn btn-primary" onclick="saveReturn()">저장</button></div></div></div>
 
 <script>
 let db;
@@ -210,10 +211,10 @@ function totalProfit(){return D.sales.reduce((a,s)=>a+saleProfit(s),0);}
 function monthProfit(y,mo){return D.sales.filter(s=>{const d=new Date(s.date);return d.getFullYear()===y&&d.getMonth()===mo;}).reduce((a,s)=>a+saleProfit(s),0);}
 function pendingSettlement(){const now=new Date();return D.sales.filter(s=>settleDate(s)>now).reduce((a,s)=>a+saleRevenue(s),0);}
 
-let currentPage='home',openProdId=null,openProdTab={},costMode='base',editCostId=null,editProdId=null,saleProdId=null,stockProdId=null,stockEditId=null,extraCatFilter='',chartInstances={},productsSubTab='list',editSourcingId=null;
+let currentPage='home',openProdId=null,openProdTab={},costMode='base',editCostId=null,editProdId=null,saleProdId=null,saleEditId=null,returnProdId=null,returnEditId=null,stockProdId=null,stockEditId=null,extraCatFilter='',chartInstances={},productsSubTab='list',editSourcingId=null;
 
 function navigate(page){currentPage=page;document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));closeAllModals();render();}
-function closeAllModals(){['m-product','m-sale','m-stock','m-cost','m-ad','m-goal','m-sourcing','m-sourcing-confirm'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('open');});}
+function closeAllModals(){['m-product','m-sale','m-stock','m-cost','m-ad','m-goal','m-sourcing','m-sourcing-confirm','m-return'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('open');});}
 function render(){closeAllModals();const pages={home:renderHome,products:renderProducts,costs:renderCosts,analysis:renderAnalysis,settings:renderSettings};document.getElementById('app').innerHTML=pages[currentPage]();if(currentPage==='home')setTimeout(renderHomeChart,50);if(currentPage==='analysis')setTimeout(renderAnalysisCharts,50);}
 
 function renderHome(){
@@ -546,6 +547,7 @@ function renderProdDetail(p){
   const tab=openProdTab[p.id]||'sales';
   return `<div class="detail-tabs" id="pd-tabs-${p.id}">
     <button class="dtab ${tab==='sales'?'active':''}" data-tab="sales" onclick="switchProdTab('${p.id}','sales')">📋 판매내역</button>
+    <button class="dtab ${tab==='returns'?'active':''}" data-tab="returns" onclick="switchProdTab('${p.id}','returns')">↩ 반품</button>
     <button class="dtab ${tab==='stock'?'active':''}" data-tab="stock" onclick="switchProdTab('${p.id}','stock')">🏭 재고관리</button>
     <button class="dtab ${tab==='ads'?'active':''}" data-tab="ads" onclick="switchProdTab('${p.id}','ads')">📣 광고</button>
     <button class="dtab ${tab==='settle'?'active':''}" data-tab="settle" onclick="switchProdTab('${p.id}','settle')">💰 정산</button>
@@ -555,6 +557,7 @@ function renderProdDetail(p){
 }
 function renderProdDetailContent(p,tab){
   if(tab==='sales')return renderProdSales(p);
+  if(tab==='returns')return renderProdReturns(p);
   if(tab==='stock')return renderProdStock(p);
   if(tab==='ads')return renderProdAds(p);
   if(tab==='settle')return renderProdSettle(p);
@@ -562,112 +565,69 @@ function renderProdDetailContent(p,tab){
   return '';
 }
 function renderProdSales(p){
-  const sales=D.sales.filter(s=>s.productId===p.id).sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,50);
-  // 최근 8주 주간 데이터
-  const now=new Date(),wLabels=[],wProfit=[],wQty=[];
-  for(let i=7;i>=0;i--){
-    const end=new Date(now);end.setDate(end.getDate()-i*7);
-    const start=new Date(end);start.setDate(start.getDate()-6);
-    const ws=D.sales.filter(s=>s.productId===p.id&&new Date(s.date)>=start&&new Date(s.date)<=end);
-    wLabels.push(`${start.getMonth()+1}/${start.getDate()}`);
-    wProfit.push(ws.reduce((a,s)=>a+saleProfit(s),0));
-    wQty.push(ws.reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0));
+  // saleType!='return' 인 것만 (반품은 반품탭에서)
+  const sales=D.sales.filter(s=>s.productId===p.id&&s.saleType!=='return').sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,100);
+  // 최근 30일 일별 데이터
+  const now=new Date(),dLabels=[],dProfit=[];
+  for(let i=29;i>=0;i--){
+    const d=new Date(now);d.setDate(d.getDate()-i);
+    const ds=d.toISOString().split('T')[0];
+    dLabels.push((d.getMonth()+1)+'/'+(d.getDate()));
+    dProfit.push(D.sales.filter(s=>s.productId===p.id&&s.date===ds&&s.saleType!=='return').reduce((a,s)=>a+saleProfit(s),0));
   }
-  const chartId=`ch-sales-${p.id}`;
-  setTimeout(()=>{
-    makeChart(chartId,'bar',wLabels,wProfit,wProfit.map(v=>v>=0?'rgba(34,197,94,.7)':'rgba(239,68,68,.7)'));
-  },50);
+  const chartId='ch-sales-'+p.id;
+  setTimeout(()=>{makeChart(chartId,'bar',dLabels,dProfit,dProfit.map(v=>v>=0?'rgba(34,197,94,.7)':'rgba(239,68,68,.7)'));},50);
   return `
   <div class="card card-sm" style="margin-bottom:12px;">
-    <div class="stat-label" style="margin-bottom:8px;">주간 순수익 추이 (최근 8주)</div>
+    <div class="stat-label" style="margin-bottom:8px;">일별 순수익 추이 (최근 30일)</div>
     <div style="height:120px;"><canvas id="${chartId}"></canvas></div>
   </div>
-  <div class="sh" style="margin-bottom:10px;"><div style="font-size:12px;font-weight:700;">판매 내역</div><button class="btn btn-primary btn-sm" onclick="openSaleModal('${p.id}')">+ 판매 입력</button></div>
-  ${sales.length===0?`<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">판매 내역이 없습니다</div>`:`
+  <div class="sh" style="margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:700;">판매 내역</div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-sm" style="border:1px solid var(--red);color:var(--red);background:transparent;" onclick="openReturnModal('${p.id}')">↩ 반품 입력</button>
+      <button class="btn btn-primary btn-sm" onclick="openSaleModal('${p.id}')">+ 판매 입력</button>
+    </div>
+  </div>
+  ${sales.length===0?`<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">판매 내역이 없습니다<br><span style="font-size:10px;">광고탭에서 수량 입력 시 광고판매 자동 등록</span></div>`:`
   <div class="tbl-wrap"><table>
-    <thead><tr><th>날짜</th><th>판매가</th><th>판매</th><th>반품</th><th>광고비</th><th>ROAS</th><th>순수익</th><th></th></tr></thead>
+    <thead><tr><th>날짜</th><th>유형</th><th>판매가</th><th>수량</th><th>광고비</th><th>ROAS</th><th>순수익</th><th></th></tr></thead>
     <tbody>${sales.map(s=>{
       const prof=saleProfit(s);
       const adCost=resolveAdCost(s),adSales=resolveAdSales(s);
       const roas=adCost>0?(adSales/adCost*100).toFixed(0)+'%':'-';
       const adLinked=D.ads.some(a=>a.productId===p.id&&a.date===s.date);
-      const adCell=adCost?`₩${fmt(adCost)}${adLinked?'<span title="광고탭 연동됨" style="font-size:9px;color:var(--green);margin-left:3px;">⚡</span>':''}`:'-';
-      return `<tr><td>${s.date}</td><td>₩${fmt(s.sellingPrice||p.sellingPrice)}</td><td>${s.qty}</td><td>${s.returnQty||0}</td><td>${adCell}</td><td>${roas}</td><td class="${nc(prof)}">${prof<0?'-':''}₩${fmt(Math.abs(prof))}</td><td><button class="btn btn-danger btn-sm" onclick="delSale('${s.id}')">삭제</button></td></tr>`;
+      const adCell=adCost?'₩'+fmt(adCost)+(adLinked?'<span title="광고탭 연동됨" style="font-size:9px;color:var(--green);margin-left:3px;">⚡</span>':''):'-';
+      const typeBadge=s.saleType==='ad'?'<span class="tag tb" style="font-size:9px;padding:1px 5px;">광고</span>':'<span class="tag tg" style="font-size:9px;padding:1px 5px;">자연</span>';
+      return '<tr style="cursor:pointer;" onclick="openSaleModal(\''+p.id+'\',\''+s.id+'\')">'
+        +'<td>'+s.date+'</td><td>'+typeBadge+'</td><td>₩'+fmt(s.sellingPrice||p.sellingPrice)+'</td><td>'+s.qty+'</td>'
+        +'<td>'+adCell+'</td><td>'+roas+'</td><td class="'+nc(prof)+'">'+(prof<0?'-':'')+'₩'+fmt(Math.abs(prof))+'</td>'
+        +'<td onclick="event.stopPropagation()"><button class="btn btn-danger btn-sm" onclick="delSale(\''+s.id+'\')">삭제</button></td>'
+        +'</tr>';
     }).join('')}</tbody>
   </table></div>`}`;
 }
-
-function renderProdAds(p){
-  const mode=adViewTab[p.id]||'list';
-  const pid=p.id;
-  const viewToggle='<div style="display:flex;background:var(--s2);border-radius:10px;padding:3px;gap:3px;width:fit-content;margin-bottom:14px;">'
-    +'<button onclick="toggleAdView(\''+pid+'\',\'list\')" style="padding:5px 14px;border-radius:7px;border:none;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;'+(mode==='list'?'background:var(--s1);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3);':'background:transparent;color:var(--muted);')+'">📋 리스트</button>'
-    +'<button onclick="toggleAdView(\''+pid+'\',\'cal\')" style="padding:5px 14px;border-radius:7px;border:none;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;'+(mode==='cal'?'background:var(--s1);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3);':'background:transparent;color:var(--muted);')+'">📅 캘린더</button>'
-    +'</div>';
-  if(mode==='cal')return viewToggle+renderProdAdsCalendar(p);
-  const pads=D.ads.filter(a=>a.productId===p.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const totalAdCost=pads.reduce((a,x)=>a+(x.cost||0),0);
-  const totalAdSales=pads.reduce((a,x)=>a+(x.sales||0),0);
-  const totalAdClicks=pads.reduce((a,x)=>a+(x.clicks||0),0);
-  const avgRoas=totalAdCost>0?(totalAdSales/totalAdCost*100):0;
-  const avgCpc=totalAdClicks>0?(totalAdCost/totalAdClicks):0;
-  // 최근 30일 일별 차트
-  const now=new Date(),dLabels=[],dCost=[],dSales=[];
-  for(let i=29;i>=0;i--){
-    const d=new Date(now);d.setDate(d.getDate()-i);
-    const ds=d.toISOString().split('T')[0];
-    const da=pads.find(a=>a.date===ds);
-    dLabels.push(`${d.getMonth()+1}/${d.getDate()}`);
-    dCost.push(da?.cost||0);
-    dSales.push(da?.sales||0);
-  }
-  const chartId=`ch-ads-${p.id}`;
-  setTimeout(()=>{
-    const el=document.getElementById(chartId);if(!el)return;
-    if(chartInstances[chartId])chartInstances[chartId].destroy();
-    chartInstances[chartId]=new Chart(el,{
-      type:'bar',
-      data:{labels:dLabels,datasets:[
-        {label:'광고비',data:dCost,backgroundColor:'rgba(239,68,68,.6)',borderRadius:3},
-        {label:'광고매출',data:dSales,backgroundColor:'rgba(59,130,246,.5)',borderRadius:3}
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:'#6b7a99',font:{size:10},boxWidth:10}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#6b7a99',font:{size:9},maxRotation:0,maxTicksLimit:10}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#6b7a99',font:{size:9},callback:v=>'₩'+fmt(v)}}}}
-    });
-  },50);
-  return viewToggle+`
+function renderProdReturns(p){
+  const returns=D.sales.filter(s=>s.productId===p.id&&s.saleType==='return').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const totalQty=returns.reduce((a,s)=>a+(s.returnQty||0),0);
+  const totalLoss=returns.reduce((a,s)=>a+saleProfit(s),0);
+  return `
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-    <div class="card card-sm"><div class="stat-label">총 광고비</div><div style="font-size:16px;font-weight:800;color:var(--red);">₩${fmt(totalAdCost)}</div></div>
-    <div class="card card-sm"><div class="stat-label">총 광고매출</div><div style="font-size:16px;font-weight:800;color:var(--blue);">₩${fmt(totalAdSales)}</div></div>
-    <div class="card card-sm"><div class="stat-label">평균 ROAS</div><div style="font-size:16px;font-weight:800;color:${avgRoas>=100?'var(--green)':'var(--red)'};">${fmtf(avgRoas,0)}%</div></div>
-    <div class="card card-sm"><div class="stat-label">평균 CPC</div><div style="font-size:16px;font-weight:800;">₩${fmt(avgCpc)}</div></div>
+    <div class="card card-sm"><div class="stat-label">총 반품 수량</div><div style="font-size:18px;font-weight:800;color:var(--red);">${totalQty}개</div></div>
+    <div class="card card-sm"><div class="stat-label">총 손실액</div><div style="font-size:18px;font-weight:800;" class="${nc(totalLoss)}">${totalLoss<0?'-':''}₩${fmt(Math.abs(totalLoss))}</div></div>
   </div>
-  <div class="card card-sm" style="margin-bottom:12px;">
-    <div class="stat-label" style="margin-bottom:8px;">최근 30일 광고비 / 광고매출</div>
-    <div style="height:130px;"><canvas id="${chartId}"></canvas></div>
-  </div>
-  <div class="sh" style="margin-bottom:10px;">
-    <div style="font-size:12px;font-weight:700;">일별 광고 기록</div>
-    <button class="btn btn-primary btn-sm" onclick="openAdModal('${p.id}')">+ 광고비 입력</button>
-  </div>
-  ${pads.length===0?`<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">광고 기록이 없습니다<br><span style="font-size:10px;">매일 쿠팡 광고 보고서 기준으로 입력하세요</span></div>`:`
+  <div class="sh" style="margin-bottom:10px;"><div style="font-size:12px;font-weight:700;">반품 내역</div><button class="btn btn-sm" style="border:1px solid var(--red);color:var(--red);background:transparent;" onclick="openReturnModal('${p.id}')">↩ 반품 입력</button></div>
+  ${returns.length===0?`<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">반품 내역이 없습니다</div>`:`
   <div class="tbl-wrap"><table>
-    <thead><tr><th>날짜</th><th>광고비</th><th>광고매출</th><th>ROAS</th><th>클릭수</th><th>CPC</th><th>메모</th><th></th></tr></thead>
-    <tbody>${pads.map(a=>{
-      const roas=a.cost>0?(a.sales||0)/a.cost*100:0;
-      const cpc=a.clicks>0?(a.cost||0)/a.clicks:0;
-      return `<tr>
-        <td>${a.date}</td>
-        <td class="neg">₩${fmt(a.cost)}</td>
-        <td style="color:var(--blue)">₩${fmt(a.sales)}</td>
-        <td style="color:${roas>=100?'var(--green)':'var(--red)'};font-weight:700;">${fmtf(roas,0)}%</td>
-        <td>${a.clicks||'-'}</td>
-        <td>${cpc>0?'₩'+fmt(cpc):'-'}</td>
-        <td style="color:var(--muted);font-size:11px;">${a.note||'-'}</td>
-        <td><div style="display:flex;gap:4px;">
-          <button class="btn btn-ghost btn-sm" onclick="openAdModal('${p.id}','${a.id}')">수정</button>
-          <button class="btn btn-danger btn-sm" onclick="delAd('${a.id}')">삭제</button>
-        </div></td>
-      </tr>`;
+    <thead><tr><th>날짜</th><th>반품 수량</th><th>손실액</th><th>메모</th><th></th></tr></thead>
+    <tbody>${returns.map(s=>{
+      const loss=saleProfit(s);
+      return '<tr style="cursor:pointer;" onclick="openReturnModal(\''+p.id+'\',\''+s.id+'\')">'
+        +'<td>'+s.date+'</td><td class="neg">'+(s.returnQty||0)+'개</td>'
+        +'<td class="'+nc(loss)+'">'+(loss<0?'-':'')+'₩'+fmt(Math.abs(loss))+'</td>'
+        +'<td style="color:var(--muted);font-size:11px;">'+(s.note||'-')+'</td>'
+        +'<td onclick="event.stopPropagation()"><button class="btn btn-danger btn-sm" onclick="delSale(\''+s.id+'\')">삭제</button></td>'
+        +'</tr>';
     }).join('')}</tbody>
   </table></div>`}`;
 }
@@ -956,28 +916,27 @@ function delProd(id){if(!confirm('삭제 시 관련 판매/재고 내역도 삭�
 function fillAdFromDate(pid,date){
   const ad=D.ads.find(a=>a.productId===pid&&a.date===date);
   const ec=document.getElementById('s-adcost'),es=document.getElementById('s-adsales'),eh=document.getElementById('s-ad-hint');
-  if(ad){
-    if(ec)ec.value=ad.cost||0;
-    if(es)es.value=ad.sales||0;
-    if(eh){eh.textContent='⚡ 광고 탭 데이터 자동 불러옴';eh.style.color='var(--green)';}
-  } else {
-    if(ec)ec.value=0;
-    if(es)es.value=0;
-    if(eh){eh.textContent='';eh.style.color='';}
-  }
+  if(ad){if(ec)ec.value=ad.cost||0;if(es)es.value=ad.sales||0;if(eh){eh.textContent='⚡ 광고 탭 데이터 자동 불러옴';eh.style.color='var(--green)';}}
+  else{if(ec)ec.value=0;if(es)es.value=0;if(eh){eh.textContent='';eh.style.color='';}}
 }
-function openSaleModal(pid){
-  saleProdId=pid;const p=getProd(pid);
-  const todayAd=D.ads.find(a=>a.productId===pid&&a.date===today());
-  document.getElementById('ms-title').textContent=`판매 입력 — ${p.name}`;
+function openSaleModal(pid,sid=null){
+  saleProdId=pid;saleEditId=sid;const p=getProd(pid);
+  const s=sid?D.sales.find(x=>x.id===sid):null;
+  const isEdit=!!s;
+  const initDate=s?.date||today();
+  const todayAd=D.ads.find(a=>a.productId===pid&&a.date===initDate);
+  document.getElementById('ms-title').textContent=isEdit?`판매 수정 — ${p.name}`:`판매 입력 — ${p.name}`;
   document.getElementById('ms-body').innerHTML=`<div class="fgrid">
-    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${today()}" onchange="fillAdFromDate('${pid}',this.value)"></div>
-    <div class="fg"><label class="fl">판매가 (원)</label><input class="fi" id="s-sp" type="number" value="${p.sellingPrice||''}"><div class="help">비우면 등록가 적용</div></div>
-    <div class="fg"><label class="fl">판매 수량 *</label><input class="fi" id="s-qty" type="number" min="0" value="1"></div>
-    <div class="fg"><label class="fl">반품 수량</label><input class="fi" id="s-ret" type="number" min="0" value="0"></div>
-    <div class="fg"><label class="fl">광고비 (원)</label><input class="fi" id="s-adcost" type="number" min="0" value="${todayAd?.cost||0}"><div class="help" id="s-ad-hint" style="${todayAd?'color:var(--green);':''}">${todayAd?'⚡ 광고 탭 데이터 자동 불러옴':''}</div></div>
-    <div class="fg"><label class="fl">광고 매출 (원)</label><input class="fi" id="s-adsales" type="number" min="0" value="${todayAd?.sales||0}"><div class="help">ROAS 계산용</div></div>
-    <div class="fg span2"><label class="fl">메모</label><input class="fi" id="s-note" placeholder="특이사항"></div>
+    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${initDate}" onchange="fillAdFromDate('${pid}',this.value)"></div>
+    <div class="fg"><label class="fl">판매가 (원)</label><input class="fi" id="s-sp" type="number" value="${s?.sellingPrice||p.sellingPrice||''}"><div class="help">비우면 등록가 적용</div></div>
+    <div class="fg"><label class="fl">판매 수량 *</label><input class="fi" id="s-qty" type="number" min="0" value="${s?.qty||1}"></div>
+    <div class="fg"><label class="fl">판매 유형</label><select class="fi" id="s-type">
+      <option value="organic" ${!s||!s.saleType||s.saleType==='organic'?'selected':''}>자연판매</option>
+      <option value="ad" ${s?.saleType==='ad'?'selected':''}>광고판매</option>
+    </select></div>
+    <div class="fg"><label class="fl">광고비 (원)</label><input class="fi" id="s-adcost" type="number" min="0" value="${s?.adCost||(todayAd?.cost||0)}"><div class="help" id="s-ad-hint" style="${!isEdit&&todayAd?'color:var(--green);':''}">${!isEdit&&todayAd?'⚡ 광고 탭 데이터 자동 불러옴':''}</div></div>
+    <div class="fg"><label class="fl">광고 매출 (원)</label><input class="fi" id="s-adsales" type="number" min="0" value="${s?.adSales||(todayAd?.sales||0)}"><div class="help">ROAS 계산용</div></div>
+    <div class="fg span2"><label class="fl">메모</label><input class="fi" id="s-note" value="${s?.note||''}" placeholder="특이사항"></div>
   </div>`;
   document.getElementById('m-sale').classList.add('open');
 }
@@ -986,13 +945,38 @@ function saveSale(){
   if(!qty||!date){alert('날짜와 수량을 입력하세요');return;}
   const adCost=parseFloat(document.getElementById('s-adcost').value)||0;
   const adSales=parseFloat(document.getElementById('s-adsales').value)||0;
-  D.sales.push({id:uid(),productId:saleProdId,date,qty,returnQty:parseInt(document.getElementById('s-ret').value)||0,sellingPrice:parseFloat(document.getElementById('s-sp').value)||0,adCost,adSales,note:document.getElementById('s-note').value.trim()});
+  const saleType=document.getElementById('s-type')?.value||'organic';
+  const data={productId:saleProdId,date,qty,returnQty:0,sellingPrice:parseFloat(document.getElementById('s-sp').value)||0,adCost,adSales,saleType,note:document.getElementById('s-note').value.trim()};
+  if(saleEditId){const i=D.sales.findIndex(s=>s.id===saleEditId);if(i>-1)D.sales[i]={...D.sales[i],...data};}
+  else D.sales.push({id:uid(),...data});
   if(adCost>0){
     const ai=D.ads.findIndex(a=>a.productId===saleProdId&&a.date===date);
     if(ai>-1){D.ads[ai]={...D.ads[ai],cost:adCost,sales:adSales};}
-    else D.ads.push({id:uid(),productId:saleProdId,date,cost:adCost,sales:adSales,clicks:0,impressions:0,note:'판매 입력에서 자동 연동'});
+    else D.ads.push({id:uid(),productId:saleProdId,date,cost:adCost,sales:adSales,clicks:0,impressions:0,note:'판매 입력 자동 연동'});
   }
   dbSave();closeModal('m-sale');render();
+}
+function openReturnModal(pid,sid=null){
+  returnProdId=pid;returnEditId=sid;const p=getProd(pid);
+  const s=sid?D.sales.find(x=>x.id===sid):null;
+  document.getElementById('mr-title').textContent=s?'반품 수정 — '+p.name:'반품 입력 — '+p.name;
+  document.getElementById('mr-body').innerHTML='<div class="alert aw" style="margin-bottom:12px;">반품된 수량을 입력하세요. 마진 기준 손실액이 자동 계산됩니다.</div>'
+    +'<div class="fgrid">'
+    +'<div class="fg span2"><label class="fl">반품 날짜 *</label><input class="fi" id="r-date" type="date" value="'+(s?.date||today())+'"></div>'
+    +'<div class="fg span2"><label class="fl">반품 수량 *</label><input class="fi" id="r-qty" type="number" min="1" value="'+(s?.returnQty||1)+'"></div>'
+    +'<div class="fg span2"><label class="fl">메모</label><input class="fi" id="r-note" value="'+(s?.note||'')+'" placeholder="불량, 오배송, 단순변심 등"></div>'
+    +'</div>';
+  document.getElementById('m-return').classList.add('open');
+}
+function saveReturn(){
+  const date=document.getElementById('r-date')?.value;
+  const qty=parseInt(document.getElementById('r-qty')?.value)||0;
+  if(!date||!qty){alert('날짜와 수량을 입력하세요');return;}
+  const p=getProd(returnProdId);
+  const data={productId:returnProdId,date,qty:0,returnQty:qty,sellingPrice:p?.sellingPrice||0,adCost:0,adSales:0,saleType:'return',note:document.getElementById('r-note')?.value||''};
+  if(returnEditId){const i=D.sales.findIndex(s=>s.id===returnEditId);if(i>-1)D.sales[i]={...D.sales[i],...data};}
+  else D.sales.push({id:uid(),...data});
+  dbSave();closeModal('m-return');render();
 }
 function delSale(id){if(!confirm('삭제하시겠습니까?'))return;D.sales=D.sales.filter(s=>s.id!==id);dbSave();render();}
 
@@ -1072,6 +1056,7 @@ function openAdModal(pid,aid=null,preDate=null){
     <div class="fg span2"><label class="fl">날짜 *</label><input class="fi" id="ad-date" type="date" value="${a?.date||(preDate||today())}"></div>
     <div class="fg"><label class="fl">광고비 (원) *</label><input class="fi" id="ad-cost" type="number" min="0" value="${a?.cost||''}"></div>
     <div class="fg"><label class="fl">광고 매출 (원)</label><input class="fi" id="ad-sales" type="number" min="0" value="${a?.sales||''}"></div>
+    <div class="fg"><label class="fl">광고 판매 수량</label><input class="fi" id="ad-qty" type="number" min="0" value="${a?.adQty||0}"><div class="help">입력 시 판매내역에 광고판매 자동 등록</div></div>
     <div class="fg"><label class="fl">클릭수</label><input class="fi" id="ad-clicks" type="number" min="0" value="${a?.clicks||''}"><div class="help">CPC 자동계산용</div></div>
     <div class="fg"><label class="fl">노출수</label><input class="fi" id="ad-impressions" type="number" min="0" value="${a?.impressions||''}"></div>
     <div class="fg span2"><label class="fl">메모</label><input class="fi" id="ad-note" value="${a?.note||''}" placeholder="캠페인명, 특이사항 등"></div>
@@ -1082,19 +1067,16 @@ function saveAd(){
   const cost=parseFloat(document.getElementById('ad-cost')?.value)||0;
   const date=document.getElementById('ad-date')?.value;
   if(!cost||!date){alert('날짜와 광고비를 입력하세요');return;}
-  const data={productId:adProdId,date,cost,sales:parseFloat(document.getElementById('ad-sales')?.value)||0,clicks:parseInt(document.getElementById('ad-clicks')?.value)||0,impressions:parseInt(document.getElementById('ad-impressions')?.value)||0,note:document.getElementById('ad-note')?.value||''};
+  const adQty=parseInt(document.getElementById('ad-qty')?.value)||0;
+  const data={productId:adProdId,date,cost,sales:parseFloat(document.getElementById('ad-sales')?.value)||0,adQty,clicks:parseInt(document.getElementById('ad-clicks')?.value)||0,impressions:parseInt(document.getElementById('ad-impressions')?.value)||0,note:document.getElementById('ad-note')?.value||''};
   if(editAdId){const i=D.ads.findIndex(a=>a.id===editAdId);D.ads[i]={...D.ads[i],...data};}
   else D.ads.push({id:uid(),...data});
-  // ↔ 판매내역 자동 연동: 같은 날짜 판매 레코드의 adCost/adSales 업데이트
-  const daySales=D.sales.filter(s=>s.productId===adProdId&&s.date===date);
-  if(daySales.length>0){
-    let isFirst=true;
-    D.sales.forEach((s,i)=>{
-      if(s.productId===adProdId&&s.date===date){
-        D.sales[i]={...s,adCost:isFirst?data.cost:0,adSales:isFirst?data.sales:0};
-        isFirst=false;
-      }
-    });
+  // 광고판매 수량이 있으면 판매내역에 자동 등록/업데이트
+  if(adQty>0){
+    const p=getProd(adProdId);
+    const existAdSale=D.sales.find(s=>s.productId===adProdId&&s.date===date&&s.saleType==='ad');
+    if(existAdSale){const i=D.sales.findIndex(s=>s.id===existAdSale.id);D.sales[i]={...existAdSale,qty:adQty,adCost:data.cost,adSales:data.sales};}
+    else D.sales.push({id:uid(),productId:adProdId,date,qty:adQty,returnQty:0,sellingPrice:p?.sellingPrice||0,adCost:data.cost,adSales:data.sales,saleType:'ad',note:'광고탭 자동 등록'});
   }
   dbSave();closeModal('m-ad');render();
 }
