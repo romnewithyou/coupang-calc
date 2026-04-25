@@ -170,7 +170,21 @@ tbody tr:last-child td{border-bottom:none;}
 let db;
 let D={products:[],sales:[],stock:[],ads:[],sourcingCandidates:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true,cnyRate:310,marginTarget:40}};
 async function initDB(){return new Promise((res,rej)=>{const r=indexedDB.open('coupang_v2',1);r.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('kv'))e.target.result.createObjectStore('kv',{keyPath:'k'});};r.onsuccess=e=>{db=e.target.result;res();};r.onerror=rej;});}
-async function dbSave(){return new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put({k:'data',v:D});tx.oncomplete=res;});}
+async function migrateAdToSales(){
+  // 기존 광고 레코드 중 판매 레코드 없는 것 자동 생성
+  let changed=false;
+  D.ads.forEach(ad=>{
+    if(!ad.productId||!ad.date)return;
+    if(!ad.sales&&!ad.adQty)return; // 광고매출도 수량도 없으면 스킵
+    const alreadyLinked=D.sales.some(s=>s.productId===ad.productId&&s.date===ad.date&&s.saleType==='ad');
+    if(!alreadyLinked){
+      syncAdToSale(ad.productId,ad.date,ad);
+      changed=true;
+    }
+  });
+  if(changed)dbSave();
+}
+function dbSave(){return new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put({k:'data',v:D});tx.oncomplete=res;});}
 async function dbLoad(){return new Promise(res=>{const tx=db.transaction('kv','readonly');const r=tx.objectStore('kv').get('data');r.onsuccess=e=>{if(e.target.result)D={...D,...e.target.result.v};res();};r.onerror=()=>res();});}
 
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
@@ -1115,18 +1129,28 @@ function saveAd(){
   const cost=parseFloat(document.getElementById('ad-cost')?.value)||0;
   const date=document.getElementById('ad-date')?.value;
   if(!cost||!date){alert('날짜와 광고비를 입력하세요');return;}
-  const adQty=parseInt(document.getElementById('ad-qty')?.value)||0;
-  const data={productId:adProdId,date,cost,sales:parseFloat(document.getElementById('ad-sales')?.value)||0,adQty,clicks:parseInt(document.getElementById('ad-clicks')?.value)||0,impressions:parseInt(document.getElementById('ad-impressions')?.value)||0,note:document.getElementById('ad-note')?.value||''};
+  const adSalesVal=parseFloat(document.getElementById('ad-sales')?.value)||0;
+  const adQtyInput=parseInt(document.getElementById('ad-qty')?.value)||0;
+  const data={productId:adProdId,date,cost,sales:adSalesVal,adQty:adQtyInput,clicks:parseInt(document.getElementById('ad-clicks')?.value)||0,impressions:parseInt(document.getElementById('ad-impressions')?.value)||0,note:document.getElementById('ad-note')?.value||''};
   if(editAdId){const i=D.ads.findIndex(a=>a.id===editAdId);D.ads[i]={...D.ads[i],...data};}
   else D.ads.push({id:uid(),...data});
-  // 광고판매 수량이 있으면 판매내역에 자동 등록/업데이트
-  if(adQty>0){
-    const p=getProd(adProdId);
-    const existAdSale=D.sales.find(s=>s.productId===adProdId&&s.date===date&&s.saleType==='ad');
-    if(existAdSale){const i=D.sales.findIndex(s=>s.id===existAdSale.id);D.sales[i]={...existAdSale,qty:adQty,adCost:data.cost,adSales:data.sales};}
-    else D.sales.push({id:uid(),productId:adProdId,date,qty:adQty,returnQty:0,sellingPrice:p?.sellingPrice||0,adCost:data.cost,adSales:data.sales,saleType:'ad',note:'광고탭 자동 등록'});
-  }
+  // 광고매출 or 광고수량 있으면 판매내역 자동 등록
+  syncAdToSale(adProdId,date,data);
   dbSave();closeModal('m-ad');render();
+}
+function syncAdToSale(pid,date,ad){
+  const p=getProd(pid);if(!p)return;
+  const sp=p.sellingPrice||0;
+  // adQty 우선, 없으면 adSales÷판매가로 추정
+  const qty=ad.adQty>0?ad.adQty:(sp>0&&ad.sales>0?Math.round(ad.sales/sp):0);
+  if(qty<=0&&ad.sales<=0)return;
+  const existAdSale=D.sales.find(s=>s.productId===pid&&s.date===date&&s.saleType==='ad');
+  if(existAdSale){
+    const i=D.sales.findIndex(s=>s.id===existAdSale.id);
+    D.sales[i]={...existAdSale,qty:Math.max(qty,existAdSale.qty||0),adCost:ad.cost,adSales:ad.sales};
+  } else {
+    D.sales.push({id:uid(),productId:pid,date,qty,returnQty:0,sellingPrice:sp,adCost:ad.cost,adSales:ad.sales,saleType:'ad',note:'광고탭 자동 등록'});
+  }
 }
 function delAd(id){if(!confirm('삭제하시겠습니까?'))return;D.ads=D.ads.filter(a=>a.id!==id);dbSave();render();}
 
@@ -1226,6 +1250,7 @@ function updateDate(){const n=new Date();document.getElementById('hdate').textCo
 (async()=>{
   await initDB();
   await dbLoad();
+  migrateAdToSales();
   document.getElementById('loading').style.display='none';
   applyTheme();
   updateDate();
