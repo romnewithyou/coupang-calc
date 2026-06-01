@@ -171,18 +171,22 @@ let db;
 let D={products:[],sales:[],stock:[],ads:[],sourcingCandidates:[],baseCosts:[],extraCosts:[],goals:{monthlyTarget:0,totalTarget:0,startDate:''},settings:{vatRegistered:true,cnyRate:310,marginTarget:40}};
 async function initDB(){return new Promise((res,rej)=>{const r=indexedDB.open('coupang_v2',1);r.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains('kv'))e.target.result.createObjectStore('kv',{keyPath:'k'});};r.onsuccess=e=>{db=e.target.result;res();};r.onerror=rej;});}
 async function migrateAdToSales(){
-  // 기존 광고 레코드 중 판매 레코드 없는 것 자동 생성
   let changed=false;
-  D.ads.forEach(ad=>{
+  // Step1: 기존 ad-type 판매 레코드 중 adSaleId로 연결 안 된 것 전부 삭제 (중복/고아 정리)
+  const linkedSaleIds=new Set(D.ads.map(a=>a.adSaleId).filter(Boolean));
+  const orphans=D.sales.filter(s=>s.saleType==='ad'&&!linkedSaleIds.has(s.id));
+  if(orphans.length>0){
+    D.sales=D.sales.filter(s=>!(s.saleType==='ad'&&!linkedSaleIds.has(s.id)));
+    changed=true;
+  }
+  // Step2: adSaleId 없는 광고 레코드 → 새로 판매 레코드 생성
+  D.ads.forEach((ad,i)=>{
     if(!ad.productId||!ad.date)return;
-    if(!ad.sales&&!ad.adQty)return; // 광고매출도 수량도 없으면 스킵
-    const alreadyLinked=D.sales.some(s=>s.productId===ad.productId&&s.date===ad.date&&s.saleType==='ad');
-    if(!alreadyLinked){
-      syncAdToSale(ad.productId,ad.date,ad);
-      changed=true;
-    }
+    if(ad.adSaleId&&D.sales.find(s=>s.id===ad.adSaleId))return; // 이미 연결됨
+    const newId=createAdSale(ad);
+    if(newId){D.ads[i]={...ad,adSaleId:newId};changed=true;}
   });
-  if(changed)dbSave();
+  if(changed){dbSave();render();}
 }
 function dbSave(){return new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put({k:'data',v:D});tx.oncomplete=res;});}
 async function dbLoad(){return new Promise(res=>{const tx=db.transaction('kv','readonly');const r=tx.objectStore('kv').get('data');r.onsuccess=e=>{if(e.target.result)D={...D,...e.target.result.v};res();};r.onerror=()=>res();});}
@@ -201,22 +205,9 @@ const EXTRA_CATS=['포장비','마케팅비','광고비','인건비','배송비'
 function unitProfit(p,sp){sp=sp||p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);return sp-(fee+logi)*1.1-(p.purchasePrice||0);}
 function calcEndRoas(p){const sp=p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);const margin=sp-(fee+logi)*1.1-(p.purchasePrice||0);return margin>0?(sp/margin)*1.1*100:null;}
 function calcCostCeiling(p,tm){const sp=p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);return sp-(fee+logi)*1.1-sp*tm/100;}
-// 판매 레코드에 adCost가 없으면 D.ads에서 자동 조회 (같은 날 첫 번째 판매에만 적용)
-function resolveAdCost(s){
-  if(s.adCost>0)return s.adCost;
-  const adRec=D.ads.find(a=>a.productId===s.productId&&a.date===s.date);
-  if(!adRec)return 0;
-  const daySales=D.sales.filter(x=>x.productId===s.productId&&x.date===s.date);
-  return daySales.length===0||daySales[0].id===s.id?adRec.cost:0;
-}
-function resolveAdSales(s){
-  if(s.adSales>0)return s.adSales;
-  const adRec=D.ads.find(a=>a.productId===s.productId&&a.date===s.date);
-  if(!adRec)return 0;
-  const daySales=D.sales.filter(x=>x.productId===s.productId&&x.date===s.date);
-  return daySales.length===0||daySales[0].id===s.id?adRec.sales:0;
-}
-function saleProfit(s){const p=getProd(s.productId);if(!p)return 0;const sp=s.sellingPrice||p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);const margin=sp-(fee+logi)*1.1-(p.purchasePrice||0);return margin*((s.qty||0)-(s.returnQty||0))-resolveAdCost(s);}
+function resolveAdCost(s){return s.adCost||0;}
+function resolveAdSales(s){return s.adSales||0;}
+function saleProfit(s){const p=getProd(s.productId);if(!p)return 0;const sp=s.sellingPrice||p.sellingPrice||0;const fee=sp*(p.feeRate||0)/100;const logi=(p.logisticsCost||0)+(p.deliveryCost||0);const margin=sp-(fee+logi)*1.1-(p.purchasePrice||0);return margin*((s.qty||0)-(s.returnQty||0))-(s.adCost||0);}
 function saleRevenue(s){const p=getProd(s.productId);if(!p)return 0;const sp=s.sellingPrice||p.sellingPrice||0;return sp*((s.qty||0)-(s.returnQty||0));}
 function settleDate(s){const p=getProd(s.productId);const d=new Date(s.date);d.setDate(d.getDate()+(p?.settlementDays||14));return d;}
 function stockLevel(pid){const bought=D.stock.filter(s=>s.productId===pid&&s.type!=='disposal').reduce((a,s)=>a+(s.qty||0),0);const sold=D.sales.filter(s=>s.productId===pid).reduce((a,s)=>a+(s.qty||0)-(s.returnQty||0),0);const disposed=D.stock.filter(s=>s.productId===pid&&s.type==='disposal').reduce((a,s)=>a+(s.qty||0),0);return bought-sold-disposed;}
@@ -614,10 +605,13 @@ function renderProdSales(p){
       const adLinked=D.ads.some(a=>a.productId===p.id&&a.date===s.date);
       const adCell=adCost?'₩'+fmt(adCost)+(adLinked?'<span title="광고탭 연동됨" style="font-size:9px;color:var(--green);margin-left:3px;">⚡</span>':''):'-';
       const typeBadge=s.saleType==='ad'?'<span class="tag tb" style="font-size:9px;padding:1px 5px;">광고</span>':'<span class="tag tg" style="font-size:9px;padding:1px 5px;">자연</span>';
-      return '<tr style="cursor:pointer;" onclick="openSaleModal(\''+p.id+'\',\''+s.id+'\')">'
+      const isAdSale=s.saleType==='ad';
+      const rowOnClick=isAdSale?'':' onclick="openSaleModal(\\\''+p.id+'\\\''+','+'\\\''+s.id+'\\\')"';
+      const delBtn=isAdSale?'<span style="font-size:10px;color:var(--muted);">광고탭 관리</span>':'<button class="btn btn-danger btn-sm" onclick="delSale(\\\''+s.id+'\\\')">' + '삭제</button>';
+      return '<tr style="cursor:'+(isAdSale?'default':'pointer')+';"'+rowOnClick+'>'
         +'<td>'+s.date+'</td><td>'+typeBadge+'</td><td>₩'+fmt(s.sellingPrice||p.sellingPrice)+'</td><td>'+s.qty+'</td>'
-        +'<td>'+adCell+'</td><td>'+roas+'</td><td class="'+nc(prof)+'">'+(prof<0?'-':'')+'₩'+fmt(Math.abs(prof))+'</td>'
-        +'<td onclick="event.stopPropagation()"><button class="btn btn-danger btn-sm" onclick="delSale(\''+s.id+'\')">삭제</button></td>'
+        +'<td>'+adCell+'</td><td>'+roas+'</td><td class="'+nc(prof)+'">  '+(prof<0?'-':'')+'₩'+fmt(Math.abs(prof))+'</td>'
+        +'<td onclick="event.stopPropagation()">'+delBtn+'</td>'
         +'</tr>';
     }).join('')}</tbody>
   </table></div>`}`;
@@ -871,10 +865,124 @@ function renderAnalysisCharts(){
   if(D.products.length){const pn=D.products.map(p=>p.name.slice(0,6)),pp=D.products.map(p=>D.sales.filter(s=>s.productId===p.id).reduce((a,s)=>a+saleProfit(s),0));makeChart('ch-prods','bar',pn,pp,pp.map(v=>v>=0?'rgba(59,130,246,.7)':'rgba(239,68,68,.7)'));}
 }
 
+const COUPANG_PROXY = 'https://coupang-proxy-five.vercel.app/api/coupang';
+
+function saveCpKeys(){
+  localStorage.setItem('cpVendorId', document.getElementById('cp-vendor')?.value||'');
+  localStorage.setItem('cpAccessKey', document.getElementById('cp-access')?.value||'');
+  localStorage.setItem('cpSecretKey', document.getElementById('cp-secret')?.value||'');
+  alert('API 키가 저장되었습니다.');
+  render();
+}
+
+async function coupangAPI(endpoint){
+  const accessKey=localStorage.getItem('cpAccessKey')||'';
+  const secretKey=localStorage.getItem('cpSecretKey')||'';
+  if(!accessKey||!secretKey){alert('설정탭에서 쿠팡 API 키를 먼저 입력하세요');return null;}
+  try{
+    const res=await fetch(COUPANG_PROXY,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint,accessKey,secretKey})
+    });
+    return await res.json();
+  }catch(e){
+    console.error('API 오류:',e);
+    return {message:'ERROR',error:e.message};
+  }
+}
+
+async function syncCoupangOrders(){
+  const vendorId=localStorage.getItem('cpVendorId')||'A01575011';
+  const btn=document.getElementById('btn-sync-orders');
+  if(btn){btn.disabled=true;btn.textContent='동기화 중...';}
+  const now=new Date(),from=new Date(now);
+  from.setDate(from.getDate()-30);
+  const fd=d=>d.toISOString().slice(0,10).replace(/-/g,'');
+  const endpoint=`/v2/providers/rg_open_api/apis/api/v1/vendors/${vendorId}/rg/orders?paidDateFrom=${fd(from)}&paidDateTo=${fd(now)}`;
+  const data=await coupangAPI(endpoint);
+  if(!data){if(btn){btn.disabled=false;btn.textContent='📦 주문 동기화';}return;}
+  if(data.message!=='SUCCESS'){
+    alert('동기화 실패: '+(data.message||JSON.stringify(data)));
+    if(btn){btn.disabled=false;btn.textContent='📦 주문 동기화';}return;
+  }
+  const orders=data.data||[];
+  let added=0,updated=0;
+  orders.forEach(order=>{
+    const orderDate=order.paidAt?order.paidAt.slice(0,10):null;
+    if(!orderDate)return;
+    (order.orderItems||[]).forEach(item=>{
+      const vItemId=String(item.vendorItemId||'');
+      const prod=D.products.find(p=>p.vendorItemId&&String(p.vendorItemId)===vItemId);
+      const existIdx=D.sales.findIndex(s=>s.orderId===String(order.orderId)&&s.vendorItemId===vItemId);
+      const saleData={
+        productId:prod?.id||null,date:orderDate,
+        qty:item.salesQuantity||1,returnQty:0,
+        sellingPrice:item.salesPrice||(prod?.sellingPrice||0),
+        adCost:0,adSales:0,saleType:'organic',
+        orderId:String(order.orderId),vendorItemId:vItemId,
+        productName:item.productName||'',source:'api',note:'쿠팡 API 자동 동기화'
+      };
+      if(existIdx>-1){D.sales[existIdx]={...D.sales[existIdx],...saleData};updated++;}
+      else{D.sales.push({id:uid(),...saleData});added++;}
+    });
+  });
+  localStorage.setItem('cpLastSync',new Date().toLocaleString('ko-KR'));
+  dbSave();render();
+  alert(`주문 동기화 완료!\n신규: ${added}건 / 업데이트: ${updated}건`);
+}
+
+async function syncCoupangInventory(){
+  const vendorId=localStorage.getItem('cpVendorId')||'A01575011';
+  const btn=document.getElementById('btn-sync-inv');
+  if(btn){btn.disabled=true;btn.textContent='동기화 중...';}
+  const endpoint=`/v2/providers/rg_open_api/apis/api/v1/vendors/${vendorId}/rg/inventory/summaries`;
+  const data=await coupangAPI(endpoint);
+  if(!data){if(btn){btn.disabled=false;btn.textContent='🏭 재고 동기화';}return;}
+  if(data.message!=='SUCCESS'){
+    alert('재고 동기화 실패: '+(data.message||JSON.stringify(data)));
+    if(btn){btn.disabled=false;btn.textContent='🏭 재고 동기화';}return;
+  }
+  const items=data.data||[];
+  let matched=0;
+  items.forEach(item=>{
+    const vItemId=String(item.vendorItemId||'');
+    const prod=D.products.find(p=>p.vendorItemId&&String(p.vendorItemId)===vItemId);
+    if(prod){
+      const idx=D.products.findIndex(p=>p.id===prod.id);
+      if(idx>-1){D.products[idx]={...D.products[idx],apiStock:item.inventoryDetails?.totalOrderableQuantity||0};matched++;}
+    }
+  });
+  localStorage.setItem('cpLastSync',new Date().toLocaleString('ko-KR'));
+  dbSave();render();
+  alert(`재고 동기화 완료!\n${items.length}개 SKU 조회, ${matched}개 상품 매칭됨`);
+}
+
 function renderSettings(){
   const scriptUrl=localStorage.getItem('gsScriptUrl')||'',lastSync=localStorage.getItem('gsLastSync')||'';
+  const cpVendorId=localStorage.getItem('cpVendorId')||'A01575011';
+  const cpAccessKey=localStorage.getItem('cpAccessKey')||'';
+  const cpSecretKey=localStorage.getItem('cpSecretKey')||'';
+  const cpLastSync=localStorage.getItem('cpLastSync')||'';
   return `
   <div class="sh"><div class="sh-title">설정 / 백업</div></div>
+  <div class="card" style="margin-bottom:12px;border-color:rgba(255,107,53,.4);">
+    <div class="sh">
+      <div style="font-weight:700;">🔗 쿠팡 API 자동 동기화</div>
+      ${cpLastSync?`<span style="font-size:10px;color:var(--muted);">마지막: ${cpLastSync}</span>`:''}
+    </div>
+    <div class="fg"><label class="fl">업체코드 (vendorId)</label><input class="fi" id="cp-vendor" value="${cpVendorId}" placeholder="A01575011"></div>
+    <div class="fg"><label class="fl">Access Key</label><input class="fi" id="cp-access" type="password" value="${cpAccessKey}" placeholder="Access Key 입력"></div>
+    <div class="fg"><label class="fl">Secret Key</label><input class="fi" id="cp-secret" type="password" value="${cpSecretKey}" placeholder="Secret Key 입력"></div>
+    <button class="btn btn-ghost btn-sm" style="margin-bottom:12px;" onclick="saveCpKeys()">🔑 키 저장</button>
+    ${cpAccessKey?`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="btn btn-primary" id="btn-sync-orders" onclick="syncCoupangOrders()">📦 주문 동기화</button>
+      <button class="btn btn-ghost" id="btn-sync-inv" onclick="syncCoupangInventory()">🏭 재고 동기화</button>
+    </div>
+    <div class="alert ai" style="margin-top:10px;font-size:11px;">최근 30일 주문/재고를 자동으로 가져옵니다. 중복 없이 업데이트됩니다.</div>
+    `:`<div class="alert aw">Access Key와 Secret Key를 먼저 입력하고 저장하세요</div>`}
+  </div>
   <div class="card" style="margin-bottom:12px;border-color:rgba(59,130,246,.4);">
     <div class="sh"><div style="font-weight:700;">🟢 구글 시트 동기화</div>${lastSync?`<span style="font-size:10px;color:var(--muted);">${lastSync}</span>`:''}</div>
     <div class="fg"><label class="fl">Apps Script URL</label><input class="fi" id="gs-url" value="${scriptUrl}" placeholder="https://script.google.com/macros/s/.../exec"></div>
@@ -975,70 +1083,37 @@ function saveProduct(){
 }
 function delProd(id){if(!confirm('삭제 시 관련 판매/재고 내역도 삭제됩니다.'))return;D.products=D.products.filter(p=>p.id!==id);D.sales=D.sales.filter(s=>s.productId!==id);D.stock=D.stock.filter(s=>s.productId!==id);if(openProdId===id)openProdId=null;dbSave();render();}
 
-function fillAdFromDate(pid,date){
-  const ad=D.ads.find(a=>a.productId===pid&&a.date===date);
-  const ec=document.getElementById('s-adcost'),es=document.getElementById('s-adsales'),eh=document.getElementById('s-ad-hint');
-  if(ad){if(ec)ec.value=ad.cost||0;if(es)es.value=ad.sales||0;if(eh){eh.textContent='⚡ 광고 탭 데이터 자동 불러옴';eh.style.color='var(--green)';}}
-  else{if(ec)ec.value=0;if(es)es.value=0;if(eh){eh.textContent='';eh.style.color='';}}
-}
 function openSaleModal(pid,sid=null){
   saleProdId=pid;saleEditId=sid;const p=getProd(pid);
   const s=sid?D.sales.find(x=>x.id===sid):null;
   const isEdit=!!s;
   const initDate=s?.date||today();
-  const todayAd=D.ads.find(a=>a.productId===pid&&a.date===initDate);
-  document.getElementById('ms-title').textContent=isEdit?`판매 수정 — ${p.name}`:`판매 입력 — ${p.name}`;
-  document.getElementById('ms-body').innerHTML=`<div class="fgrid">
-    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${initDate}" onchange="fillAdFromDate('${pid}',this.value)"></div>
+  document.getElementById('ms-title').textContent=isEdit?`자연판매 수정 — ${p.name}`:`자연판매 입력 — ${p.name}`;
+  document.getElementById('ms-body').innerHTML=`
+  <div class="alert ai" style="margin-bottom:12px;font-size:11px;">자연판매(검색 유입)만 입력하세요. 광고판매는 광고탭에서 자동 등록됩니다.</div>
+  <div class="fgrid">
+    <div class="fg"><label class="fl">날짜 *</label><input class="fi" id="s-date" type="date" value="${initDate}"></div>
     <div class="fg"><label class="fl">판매가 (원)</label><input class="fi" id="s-sp" type="number" value="${s?.sellingPrice||p.sellingPrice||''}"><div class="help">비우면 등록가 적용</div></div>
-    <div class="fg"><label class="fl">판매 수량 *</label><input class="fi" id="s-qty" type="number" min="0" value="${s?.qty||1}"></div>
-    <div class="fg"><label class="fl">판매 유형</label><select class="fi" id="s-type">
-      <option value="organic" ${!s||!s.saleType||s.saleType==='organic'?'selected':''}>자연판매</option>
-      <option value="ad" ${s?.saleType==='ad'?'selected':''}>광고판매</option>
-    </select></div>
-    <div class="fg"><label class="fl">광고비 (원)</label><input class="fi" id="s-adcost" type="number" min="0" value="${s?.adCost||(todayAd?.cost||0)}"><div class="help" id="s-ad-hint" style="${!isEdit&&todayAd?'color:var(--green);':''}">${!isEdit&&todayAd?'⚡ 광고 탭 데이터 자동 불러옴':''}</div></div>
-    <div class="fg"><label class="fl">광고 매출 (원)</label><input class="fi" id="s-adsales" type="number" min="0" value="${s?.adSales||(todayAd?.sales||0)}"><div class="help">ROAS 계산용</div></div>
+    <div class="fg span2"><label class="fl">판매 수량 *</label><input class="fi" id="s-qty" type="number" min="1" value="${s?.qty||1}"></div>
     <div class="fg span2"><label class="fl">메모</label><input class="fi" id="s-note" value="${s?.note||''}" placeholder="특이사항"></div>
   </div>`;
   document.getElementById('m-sale').classList.add('open');
 }
 function saveSale(){
-  const qty=parseInt(document.getElementById('s-qty').value)||0,date=document.getElementById('s-date').value;
+  const qty=parseInt(document.getElementById('s-qty').value)||0;
+  const date=document.getElementById('s-date').value;
   if(!qty||!date){alert('날짜와 수량을 입력하세요');return;}
-  const adCost=parseFloat(document.getElementById('s-adcost').value)||0;
-  const adSales=parseFloat(document.getElementById('s-adsales').value)||0;
-  const saleType=document.getElementById('s-type')?.value||'organic';
-  const data={productId:saleProdId,date,qty,returnQty:0,sellingPrice:parseFloat(document.getElementById('s-sp').value)||0,adCost,adSales,saleType,note:document.getElementById('s-note').value.trim()};
-  if(saleEditId){const i=D.sales.findIndex(s=>s.id===saleEditId);if(i>-1)D.sales[i]={...D.sales[i],...data};}
-  else D.sales.push({id:uid(),...data});
-  if(adCost>0){
-    const ai=D.ads.findIndex(a=>a.productId===saleProdId&&a.date===date);
-    if(ai>-1){D.ads[ai]={...D.ads[ai],cost:adCost,sales:adSales};}
-    else D.ads.push({id:uid(),productId:saleProdId,date,cost:adCost,sales:adSales,clicks:0,impressions:0,note:'판매 입력 자동 연동'});
+  const data={productId:saleProdId,date,qty,returnQty:0,
+    sellingPrice:parseFloat(document.getElementById('s-sp').value)||0,
+    adCost:0,adSales:0,saleType:'organic',
+    note:document.getElementById('s-note').value.trim()};
+  if(saleEditId){
+    const i=D.sales.findIndex(s=>s.id===saleEditId);
+    if(i>-1)D.sales[i]={...D.sales[i],...data};
+  } else {
+    D.sales.push({id:uid(),...data});
   }
   dbSave();closeModal('m-sale');render();
-}
-function openReturnModal(pid,sid=null){
-  returnProdId=pid;returnEditId=sid;const p=getProd(pid);
-  const s=sid?D.sales.find(x=>x.id===sid):null;
-  document.getElementById('mr-title').textContent=s?'반품 수정 — '+p.name:'반품 입력 — '+p.name;
-  document.getElementById('mr-body').innerHTML='<div class="alert aw" style="margin-bottom:12px;">반품된 수량을 입력하세요. 마진 기준 손실액이 자동 계산됩니다.</div>'
-    +'<div class="fgrid">'
-    +'<div class="fg span2"><label class="fl">반품 날짜 *</label><input class="fi" id="r-date" type="date" value="'+(s?.date||today())+'"></div>'
-    +'<div class="fg span2"><label class="fl">반품 수량 *</label><input class="fi" id="r-qty" type="number" min="1" value="'+(s?.returnQty||1)+'"></div>'
-    +'<div class="fg span2"><label class="fl">메모</label><input class="fi" id="r-note" value="'+(s?.note||'')+'" placeholder="불량, 오배송, 단순변심 등"></div>'
-    +'</div>';
-  document.getElementById('m-return').classList.add('open');
-}
-function saveReturn(){
-  const date=document.getElementById('r-date')?.value;
-  const qty=parseInt(document.getElementById('r-qty')?.value)||0;
-  if(!date||!qty){alert('날짜와 수량을 입력하세요');return;}
-  const p=getProd(returnProdId);
-  const data={productId:returnProdId,date,qty:0,returnQty:qty,sellingPrice:p?.sellingPrice||0,adCost:0,adSales:0,saleType:'return',note:document.getElementById('r-note')?.value||''};
-  if(returnEditId){const i=D.sales.findIndex(s=>s.id===returnEditId);if(i>-1)D.sales[i]={...D.sales[i],...data};}
-  else D.sales.push({id:uid(),...data});
-  dbSave();closeModal('m-return');render();
 }
 function delSale(id){if(!confirm('삭제하시겠습니까?'))return;D.sales=D.sales.filter(s=>s.id!==id);dbSave();render();}
 
@@ -1131,28 +1206,66 @@ function saveAd(){
   if(!cost||!date){alert('날짜와 광고비를 입력하세요');return;}
   const adSalesVal=parseFloat(document.getElementById('ad-sales')?.value)||0;
   const adQtyInput=parseInt(document.getElementById('ad-qty')?.value)||0;
-  const data={productId:adProdId,date,cost,sales:adSalesVal,adQty:adQtyInput,clicks:parseInt(document.getElementById('ad-clicks')?.value)||0,impressions:parseInt(document.getElementById('ad-impressions')?.value)||0,note:document.getElementById('ad-note')?.value||''};
-  if(editAdId){const i=D.ads.findIndex(a=>a.id===editAdId);D.ads[i]={...D.ads[i],...data};}
-  else D.ads.push({id:uid(),...data});
-  // 광고매출 or 광고수량 있으면 판매내역 자동 등록
-  syncAdToSale(adProdId,date,data);
+  const newData={productId:adProdId,date,cost,sales:adSalesVal,adQty:adQtyInput,
+    clicks:parseInt(document.getElementById('ad-clicks')?.value)||0,
+    impressions:parseInt(document.getElementById('ad-impressions')?.value)||0,
+    note:document.getElementById('ad-note')?.value||''};
+
+  let adRec;
+  if(editAdId){
+    const i=D.ads.findIndex(a=>a.id===editAdId);
+    // 날짜가 변경됐는지 확인
+    const oldDate=D.ads[i]?.date;
+    const dateChanged=oldDate&&oldDate!==date;
+    adRec={...D.ads[i],...newData};
+    D.ads[i]=adRec;
+    // 연결된 판매 레코드 업데이트 (날짜 포함)
+    if(adRec.adSaleId){
+      const si=D.sales.findIndex(s=>s.id===adRec.adSaleId);
+      if(si>-1){
+        const qty=calcAdQty(adRec);
+        D.sales[si]={...D.sales[si],date,qty,adCost:cost,adSales:adSalesVal,sellingPrice:getProd(adProdId)?.sellingPrice||D.sales[si].sellingPrice};
+      } else {
+        // 링크 깨짐 → 새로 생성
+        adRec.adSaleId=createAdSale(adRec);
+        D.ads[i]=adRec;
+      }
+    } else {
+      // adSaleId 없음 → 새로 생성
+      const newId=createAdSale(adRec);
+      if(newId){adRec.adSaleId=newId;D.ads[i]=adRec;}
+    }
+  } else {
+    adRec={id:uid(),...newData};
+    const newId=createAdSale(adRec);
+    if(newId)adRec.adSaleId=newId;
+    D.ads.push(adRec);
+  }
   dbSave();closeModal('m-ad');render();
 }
-function syncAdToSale(pid,date,ad){
-  const p=getProd(pid);if(!p)return;
-  const sp=p.sellingPrice||0;
-  // adQty 우선, 없으면 adSales÷판매가로 추정
-  const qty=ad.adQty>0?ad.adQty:(sp>0&&ad.sales>0?Math.round(ad.sales/sp):0);
-  if(qty<=0&&ad.sales<=0)return;
-  const existAdSale=D.sales.find(s=>s.productId===pid&&s.date===date&&s.saleType==='ad');
-  if(existAdSale){
-    const i=D.sales.findIndex(s=>s.id===existAdSale.id);
-    D.sales[i]={...existAdSale,qty:Math.max(qty,existAdSale.qty||0),adCost:ad.cost,adSales:ad.sales};
-  } else {
-    D.sales.push({id:uid(),productId:pid,date,qty,returnQty:0,sellingPrice:sp,adCost:ad.cost,adSales:ad.sales,saleType:'ad',note:'광고탭 자동 등록'});
-  }
+function calcAdQty(ad){
+  if(ad.adQty>0)return ad.adQty;
+  const p=getProd(ad.productId);
+  const sp=p?.sellingPrice||0;
+  return(sp>0&&ad.sales>0)?Math.round(ad.sales/sp):0;
 }
-function delAd(id){if(!confirm('삭제하시겠습니까?'))return;D.ads=D.ads.filter(a=>a.id!==id);dbSave();render();}
+function createAdSale(ad){
+  const qty=calcAdQty(ad);
+  if(qty<=0&&ad.sales<=0)return null;
+  const p=getProd(ad.productId);
+  const saleId=uid();
+  D.sales.push({id:saleId,productId:ad.productId,date:ad.date,qty:Math.max(qty,0),
+    returnQty:0,sellingPrice:p?.sellingPrice||0,adCost:ad.cost,adSales:ad.sales,
+    saleType:'ad',note:'광고탭 자동 등록'});
+  return saleId;
+}
+function delAd(id){
+  if(!confirm('삭제하시겠습니까?'))return;
+  const ad=D.ads.find(a=>a.id===id);
+  if(ad?.adSaleId)D.sales=D.sales.filter(s=>s.id!==ad.adSaleId);
+  D.ads=D.ads.filter(a=>a.id!==id);
+  dbSave();render();
+}
 
 // ===== SOURCING MODAL =====
 function addSourcingRow(){openSourcingModal();}
