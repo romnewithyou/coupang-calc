@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>쿠팡 순수익 계산기</title>
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg: #0f1115;
@@ -169,7 +170,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
       <h2>최근 동기화</h2>
       <div id="syncStatus" class="dim" style="font-size:13px">아직 동기화하지 않았습니다.</div>
     </div>
-    <div class="version" id="versionTag">v2026.06.03-02</div>
+    <div class="version" id="versionTag">v2026.06.03-05</div>
   </div>
 
   <!-- PRODUCTS -->
@@ -218,6 +219,12 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
     <div class="card"><h2>상품별 지표</h2><div class="table-scroll"><table class="table" id="prodMetricTable"></table></div></div>
     <div class="card"><h2>월별 실적</h2><div class="table-scroll"><table class="table" id="monthPerfTable"></table></div></div>
     <div class="card">
+      <h2>광고 효율</h2>
+      <div id="adKpi" class="stat-grid" style="margin-bottom:10px"></div>
+      <div class="table-scroll"><table class="table" id="adEffTable"></table></div>
+      <div class="hint" style="margin-top:6px">ROAS=매출/광고비, CPC=광고비/클릭, CTR=클릭/노출, CVR=전환/클릭(매출 발생 기준)</div>
+    </div>
+    <div class="card">
       <h2>부가세 요약</h2>
       <div id="vatSummary"></div>
     </div>
@@ -246,9 +253,11 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
       <div id="syncLog" class="hint" style="margin-top:10px"></div>
     </div>
     <div class="card">
-      <h2>광고비 CSV 업로드</h2>
-      <p class="hint" style="margin-bottom:8px">쿠팡 광고센터 CSV의 날짜/광고비 컬럼을 자동 인식합니다.</p>
-      <input type="file" id="adCsv" accept=".csv">
+      <h2>광고 데이터 입력</h2>
+      <p class="hint" style="margin-bottom:8px">쿠팡 광고센터 CSV의 날짜/광고비/매출/클릭/노출 컬럼을 자동 인식합니다.</p>
+      <input type="file" id="adCsv" accept=".csv,.xlsx,.xls">
+      <label class="chk" style="margin:8px 0"><input type="checkbox" id="adAppend"> 기존 데이터에 추가(누적)</label>
+      <button class="btn sm sec" id="addAdManual">＋ 직접 입력</button>
       <div id="adSummary" class="hint" style="margin-top:8px"></div>
     </div>
     <div class="card">
@@ -299,7 +308,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 <script>
 "use strict";
 
-const VERSION = "v2026.06.03-02";
+const VERSION = "v2026.06.03-05";
 const PROXY = "https://coupang-proxy-five.vercel.app/api/coupang";
 const DEFAULT_VENDOR = "A01575011";
 const DB_NAME = "coupang_v2";
@@ -379,7 +388,11 @@ function axisMoney(v) {
 }
 function normalizeDate(s) {
   if (!s) return "";
-  const m = String(s).match(/(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})/);
+  let str = String(s).trim();
+  if (/[eE]\+?\d/.test(str)) str = String(Math.round(Number(str))); // 2.0260518E7 -> 20260518
+  const ymd8 = str.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (ymd8) return ymd8[1] + "-" + ymd8[2] + "-" + ymd8[3];
+  const m = str.match(/(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})/);
   if (!m) return "";
   return m[1] + "-" + m[2].padStart(2, "0") + "-" + m[3].padStart(2, "0");
 }
@@ -714,6 +727,48 @@ function renderAnalysis() {
 
   // 부가세 요약
   renderVat();
+  // 광고 효율
+  renderAdEff();
+}
+function renderAdEff() {
+  const kpi = $("#adKpi"), tbl = $("#adEffTable");
+  if (!D.ads.length) {
+    kpi.innerHTML = '';
+    tbl.innerHTML = '<tbody><tr><td class="empty">광고 데이터가 없습니다. 설정 탭에서 CSV 업로드 또는 직접 입력하세요.</td></tr></tbody>';
+    return;
+  }
+  const sum = (f) => D.ads.reduce((s, a) => s + num(a[f]), 0);
+  const tCost = sum("amount"), tSales = sum("sales"), tClick = sum("clicks"), tImp = sum("impressions");
+  const roas = tCost > 0 ? (tSales / tCost) * 100 : 0;
+  const cpc = tClick > 0 ? tCost / tClick : 0;
+  const ctr = tImp > 0 ? (tClick / tImp) * 100 : 0;
+  const stat = (label, val, cls) => '<div class="stat"><div class="label">' + label + '</div><div class="value ' + (cls || "") + '" style="font-size:18px">' + val + '</div></div>';
+  kpi.innerHTML =
+    stat("총 ROAS", Math.round(roas) + "%", roas >= 300 ? "pos" : (roas < 100 && tCost > 0 ? "neg" : "")) +
+    stat("총 광고비", won(tCost)) +
+    stat("평균 CPC", won(cpc)) +
+    stat("평균 CTR", pctStr(ctr));
+
+  // 상품별 집계 (productId 있으면 상품명, 없으면 미지정)
+  const byProd = {};
+  D.ads.forEach(a => {
+    const p = a.productId ? D.products.find(x => x.id === a.productId) : null;
+    const key = p ? p.name : (a.adName || "미지정");
+    if (!byProd[key]) byProd[key] = { cost: 0, sales: 0, clicks: 0, imp: 0 };
+    byProd[key].cost += num(a.amount); byProd[key].sales += num(a.sales);
+    byProd[key].clicks += num(a.clicks); byProd[key].imp += num(a.impressions);
+  });
+  const rows = Object.entries(byProd).sort((a, b) => b[1].cost - a[1].cost);
+  tbl.innerHTML = '<thead><tr><th>대상</th><th>광고비</th><th>매출</th><th>ROAS</th><th>CPC</th><th>CTR</th></tr></thead><tbody>' +
+    rows.map(([name, v]) => {
+      const r = v.cost > 0 ? (v.sales / v.cost) * 100 : 0;
+      const c = v.clicks > 0 ? v.cost / v.clicks : 0;
+      const ct = v.imp > 0 ? (v.clicks / v.imp) * 100 : 0;
+      const rcls = r >= 300 ? "pos" : (r < 100 && v.cost > 0 ? "neg" : "");
+      return '<tr><td>' + esc(name.slice(0, 14)) + '</td><td>' + won(v.cost) + '</td><td>' + won(v.sales) + '</td>' +
+        '<td class="' + rcls + '">' + (v.cost > 0 ? Math.round(r) + "%" : "-") + '</td>' +
+        '<td>' + (v.clicks > 0 ? won(c) : "-") + '</td><td>' + (v.imp > 0 ? pctStr(ct) : "-") + '</td></tr>';
+    }).join("") + '</tbody>';
 }
 function renderVat() {
   const el = $("#vatSummary");
@@ -778,9 +833,24 @@ window.openProductDetail = function (id) {
           : '<div class="empty">사입 기록이 없습니다.</div>');
     }
     if (tab === "ad") {
-      const totAd = ads.reduce((acc, a) => acc + num(a.amount), 0);
-      return '<div class="hint" style="margin-bottom:8px">광고 유입 여부는 API로 구분 불가하여 전체 광고비만 표시합니다.</div>' +
-        '<div class="calc-line total"><span class="k">전체 광고비</span><span class="v">' + won(totAd) + '</span></div>';
+      const mine = ads.filter(a => a.productId === id);
+      const src = mine.length ? mine : [];
+      const c = src.reduce((s, a) => s + num(a.amount), 0);
+      const sv = src.reduce((s, a) => s + num(a.sales), 0);
+      const ck = src.reduce((s, a) => s + num(a.clicks), 0);
+      const ip = src.reduce((s, a) => s + num(a.impressions), 0);
+      const totAll = ads.reduce((acc, a) => acc + num(a.amount), 0);
+      if (!mine.length) {
+        return '<div class="hint" style="margin-bottom:8px">이 상품에 연결된 광고 데이터가 없습니다. (전체 광고비 ' + won(totAll) + ')</div>';
+      }
+      const roas = c > 0 ? (sv / c) * 100 : 0;
+      const cpc = ck > 0 ? c / ck : 0;
+      const ctr = ip > 0 ? (ck / ip) * 100 : 0;
+      return '<div class="calc-line"><span class="k">광고비</span><span class="v">' + won(c) + '</span></div>' +
+        '<div class="calc-line"><span class="k">광고 매출</span><span class="v">' + won(sv) + '</span></div>' +
+        '<div class="calc-line"><span class="k">ROAS</span><span class="v ' + (roas >= 300 ? "pos" : (roas < 100 ? "neg" : "")) + '">' + Math.round(roas) + '%</span></div>' +
+        '<div class="calc-line"><span class="k">CPC</span><span class="v">' + won(cpc) + '</span></div>' +
+        '<div class="calc-line total"><span class="k">CTR</span><span class="v">' + pctStr(ctr) + '</span></div>';
     }
     if (tab === "settle") {
       return '<div class="hint" style="margin-bottom:8px">정산 API 미연동 — 최근 14일 매출 기반 추정입니다.</div>' +
@@ -1023,32 +1093,94 @@ $("#syncInv").addEventListener("click", async () => {
   } catch (err) { toast("재고 오류: " + err.message); }
 });
 
-/* ===== 광고 CSV ===== */
+/* ===== 광고 CSV / XLSX ===== */
+async function processAdRows(rows, append) {
+  if (!rows.length) { toast("파일을 읽지 못했습니다"); return; }
+  const header = rows[0].map(h => String(h == null ? "" : h).trim());
+  const findExact = (name) => header.findIndex(h => h === name);
+  const find = (re) => header.findIndex(h => re.test(h));
+  const dateIdx = find(/날짜|일자|date/i);
+  const costIdx = findExact("광고비") >= 0 ? findExact("광고비") : find(/광고비|집행금액|소진|cost|spend/i);
+  let salesIdx = findExact("총 전환매출액(14일)");
+  if (salesIdx < 0) salesIdx = findExact("총 전환매출액(1일)");
+  if (salesIdx < 0) salesIdx = find(/전환매출|광고매출|판매금액|매출|sales|revenue/i);
+  const clickIdx = findExact("클릭수") >= 0 ? findExact("클릭수") : find(/클릭수|clicks?/i);
+  const impIdx = findExact("노출수") >= 0 ? findExact("노출수") : find(/노출수|임프|impression/i);
+  const optIdx = find(/광고집행\s*옵션ID|옵션ID|optionId|vendorItemId/i);
+  const nameIdx = find(/광고집행\s*상품명|상품명|상품|소재명|product|item/i);
+  if (costIdx < 0) { toast("광고비 컬럼을 찾지 못했습니다"); return; }
+  if (!append) D.ads = [];
+  let cnt = 0;
+  const toNum = (v) => {
+    const s = String(v == null ? "" : v).trim();
+    if (/[eE]\+?\d/.test(s) && /^[\d.eE+-]+$/.test(s)) return Math.round(Number(s));
+    return num(s.replace(/[^0-9.-]/g, ""));
+  };
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]; if (!r || r[costIdx] == null) continue;
+    const amount = toNum(r[costIdx]);
+    const sales = salesIdx >= 0 ? toNum(r[salesIdx]) : 0;
+    const clicks = clickIdx >= 0 ? toNum(r[clickIdx]) : 0;
+    const impressions = impIdx >= 0 ? toNum(r[impIdx]) : 0;
+    if (!amount && !sales && !clicks && !impressions) continue;
+    const nm = nameIdx >= 0 ? String(r[nameIdx] || "").trim() : "";
+    const opt = optIdx >= 0 ? String(toNum(r[optIdx]) || "").trim() : "";
+    let matched = opt ? D.products.find(p => p.optionId && String(p.optionId) === opt) : null;
+    if (!matched && nm) matched = D.products.find(p => p.name && (nm.includes(p.name) || p.name.includes(nm)));
+    D.ads.push({ id: uid(), productId: matched ? matched.id : "", adName: nm, optionId: opt, date: dateIdx >= 0 ? normalizeDate(r[dateIdx]) : "", amount, sales, clicks, impressions });
+    cnt++;
+  }
+  await saveD();
+  updateAdSummary();
+  renderHome(); renderAnalysis(); toast(cnt + "건 광고 데이터 " + (append ? "추가됨" : "등록됨"));
+}
 $("#adCsv").addEventListener("change", (e) => {
   const file = e.target.files[0]; if (!file) return;
+  const append = $("#adAppend") && $("#adAppend").checked;
+  const isExcel = /\.xlsx?$/i.test(file.name);
   const reader = new FileReader();
   reader.onload = async () => {
-    const rows = parseCSV(reader.result);
-    if (!rows.length) { toast("CSV를 읽지 못했습니다"); return; }
-    const header = rows[0].map(h => h.trim());
-    const dateIdx = header.findIndex(h => /날짜|일자|date/i.test(h));
-    const costIdx = header.findIndex(h => /광고비|비용|집행|cost|spend/i.test(h));
-    if (costIdx < 0) { toast("광고비 컬럼을 찾지 못했습니다"); return; }
-    D.ads = [];
-    let cnt = 0;
-    for (let i = 1; i < rows.length; i++) {
-      const r = rows[i]; if (!r || !r[costIdx]) continue;
-      const amount = num(String(r[costIdx]).replace(/[^0-9.-]/g, ""));
-      if (!amount) continue;
-      D.ads.push({ id: uid(), date: dateIdx >= 0 ? normalizeDate(r[dateIdx]) : "", amount }); cnt++;
-    }
-    await saveD();
-    $("#adSummary").textContent = cnt + "건, 총 " + won(D.ads.reduce((s, a) => s + a.amount, 0));
-    renderHome(); renderAnalysis(); toast(cnt + "건 광고비 등록됨");
+    try {
+      let rows;
+      if (isExcel) {
+        if (typeof XLSX === "undefined") { toast("엑셀 라이브러리 로드 실패"); return; }
+        const wb = XLSX.read(new Uint8Array(reader.result), { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+      } else {
+        rows = parseCSV(reader.result);
+      }
+      await processAdRows(rows, append);
+    } catch (err) { toast("처리 실패: " + err.message); }
     e.target.value = "";
   };
-  reader.readAsText(file, "utf-8");
+  if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file, "utf-8");
 });
+function updateAdSummary() {
+  const el = $("#adSummary"); if (!el) return;
+  const totCost = D.ads.reduce((s, a) => s + num(a.amount), 0);
+  const totSales = D.ads.reduce((s, a) => s + num(a.sales), 0);
+  el.textContent = D.ads.length + "건 · 광고비 " + won(totCost) + (totSales ? " · 매출 " + won(totSales) : "");
+}
+$("#addAdManual") && $("#addAdManual").addEventListener("click", () => {
+  const opts = '<option value="">상품 미지정</option>' + D.products.map(p => '<option value="' + p.id + '">' + esc(p.name) + '</option>').join("");
+  openModal(
+    '<div class="modal-head"><h2>광고 데이터 입력</h2><button class="x" onclick="closeModal()">×</button></div>' +
+    '<div class="field"><label>상품</label><select id="ad_pid">' + opts + '</select></div>' +
+    '<div class="field"><label>날짜</label><input type="date" id="ad_date"></div>' +
+    '<div class="row"><div class="field"><label>광고비</label><input type="number" id="ad_cost"></div>' +
+    '<div class="field"><label>광고 매출</label><input type="number" id="ad_sales"></div></div>' +
+    '<div class="row"><div class="field"><label>클릭수</label><input type="number" id="ad_click"></div>' +
+    '<div class="field"><label>노출수</label><input type="number" id="ad_imp"></div></div>' +
+    '<button class="btn" onclick="saveAdManual()">저장</button>'
+  );
+});
+window.saveAdManual = async function () {
+  const cost = num($("#ad_cost").value);
+  if (!cost && !num($("#ad_sales").value)) { toast("광고비 또는 매출을 입력하세요"); return; }
+  D.ads.push({ id: uid(), productId: $("#ad_pid").value, adName: "", date: $("#ad_date").value, amount: cost, sales: num($("#ad_sales").value), clicks: num($("#ad_click").value), impressions: num($("#ad_imp").value) });
+  await saveD(); closeModal(); updateAdSummary(); renderHome(); renderAnalysis(); toast("광고 데이터 추가됨");
+};
 
 /* ===== 구글 시트 ===== */
 $("#saveGs").addEventListener("click", async () => { D.meta.gsUrl = $("#gsUrl").value.trim(); await saveD(); toast("URL 저장됨"); });
@@ -1154,13 +1286,13 @@ function applySettingsToInputs() {
   $("#setCny").value = D.settings.cnyRate;
   $("#setMargin").value = D.settings.marginTarget;
   $("#setVat").checked = !!D.settings.vatRegistered;
-  if (D.ads.length) $("#adSummary").textContent = D.ads.length + "건, 총 " + won(D.ads.reduce((s, a) => s + a.amount, 0));
+  if (D.ads.length) updateAdSummary();
 }
 async function init() {
   $("#versionTag").textContent = VERSION;
   await openDB();
   await loadD();
-  await setTheme(D.meta.theme || "dark");
+  await setTheme(D.meta.theme || "light");
   applySettingsToInputs();
   const now = new Date(), from = new Date(); from.setDate(from.getDate() - 30);
   $("#syncFrom").value = from.toISOString().slice(0, 10);
