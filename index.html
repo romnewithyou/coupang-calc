@@ -170,7 +170,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
       <h2>최근 동기화</h2>
       <div id="syncStatus" class="dim" style="font-size:13px">아직 동기화하지 않았습니다.</div>
     </div>
-    <div class="version" id="versionTag">v2026.06.03-05</div>
+    <div class="version" id="versionTag">v2026.06.03-07</div>
   </div>
 
   <!-- PRODUCTS -->
@@ -308,7 +308,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 <script>
 "use strict";
 
-const VERSION = "v2026.06.03-05";
+const VERSION = "v2026.06.03-07";
 const PROXY = "https://coupang-proxy-five.vercel.app/api/coupang";
 const DEFAULT_VENDOR = "A01575011";
 const DB_NAME = "coupang_v2";
@@ -631,6 +631,9 @@ function renderProducts() {
 const SOURCE_STATES = ["검토중", "사입예정", "사입확정", "제외"];
 function renderSourcing() {
   const t = $("#sourceTable");
+  if (!t) return;
+  if (!Array.isArray(D.sourcingCandidates)) D.sourcingCandidates = [];
+  if (!D.settings) D.settings = { vatRegistered: false, cnyRate: 310, marginTarget: 40 };
   if (!D.sourcingCandidates.length) { t.innerHTML = '<tr><td colspan="5" class="empty">소싱 후보가 없습니다. 키워드로 추가하세요.</td></tr>'; return; }
   t.innerHTML = '<thead><tr><th>키워드</th><th>예상판매가</th><th>위안가</th><th>예상마진</th><th>상태</th></tr></thead><tbody>' +
     D.sourcingCandidates.map(s => {
@@ -945,9 +948,12 @@ window.delStock = async function (id) {
 
 /* ===== 소싱 계산기 ===== */
 $("#addSource").addEventListener("click", async () => {
-  const kw = $("#sourceKeyword").value.trim(); if (!kw) { toast("키워드를 입력하세요"); return; }
-  D.sourcingCandidates.push({ id: uid(), keyword: kw, expectPrice: 0, cnyPrice: 0, feeRate: 10.8, fulfill: 0, ship: 0, state: "검토중" });
-  $("#sourceKeyword").value = ""; await saveD(); renderSourcing(); toast("후보 추가됨");
+  try {
+    const kw = $("#sourceKeyword").value.trim(); if (!kw) { toast("키워드를 입력하세요"); return; }
+    if (!Array.isArray(D.sourcingCandidates)) D.sourcingCandidates = [];
+    D.sourcingCandidates.push({ id: uid(), keyword: kw, expectPrice: 0, cnyPrice: 0, feeRate: 10.8, fulfill: 0, ship: 0, state: "검토중" });
+    $("#sourceKeyword").value = ""; await saveD(); renderSourcing(); toast("후보 추가됨");
+  } catch (err) { console.error(err); toast("오류: " + (err && err.message ? err.message : "추가 실패")); }
 });
 window.cycleSource = async function (id) {
   const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
@@ -1242,11 +1248,26 @@ $("#importFile").addEventListener("change", (e) => {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = async () => {
+    let obj;
     try {
-      const obj = migrateLegacy(JSON.parse(reader.result));
-      D = Object.assign(D, obj);
-      await saveD(); renderAll(); applySettingsToInputs(); toast("복원 완료");
-    } catch (err) { toast("복원 실패: 잘못된 파일"); }
+      obj = JSON.parse(reader.result);
+    } catch (err) {
+      toast("복원 실패: JSON 형식 오류");
+      e.target.value = ""; return;
+    }
+    try {
+      obj = migrateLegacy(obj);
+      // 안전 병합: 누락 키는 기본값 유지
+      const base = { products: [], sales: [], stock: [], ads: [], sourcingCandidates: [], baseCosts: [], extraCosts: [], inventory: [], goals: {}, meta: {}, settings: { vatRegistered: false, cnyRate: 310, marginTarget: 40 } };
+      D = Object.assign(base, D, obj);
+      if (!D.settings) D.settings = base.settings;
+      if (!D.meta) D.meta = {};
+      await saveD(); renderAll(); applySettingsToInputs();
+      toast("복원 완료: 상품 " + (D.products ? D.products.length : 0) + "개");
+    } catch (err) {
+      console.error("복원 오류", err);
+      toast("복원 실패: " + (err && err.message ? err.message : "알 수 없는 오류"));
+    }
     e.target.value = "";
   };
   reader.readAsText(file);
