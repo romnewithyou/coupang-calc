@@ -170,7 +170,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
       <h2>최근 동기화</h2>
       <div id="syncStatus" class="dim" style="font-size:13px">아직 동기화하지 않았습니다.</div>
     </div>
-    <div class="version" id="versionTag">v2026.06.03-10</div>
+    <div class="version" id="versionTag">v2026.06.03-11</div>
   </div>
 
   <!-- PRODUCTS -->
@@ -327,7 +327,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 <script>
 "use strict";
 
-const VERSION = "v2026.06.03-10";
+const VERSION = "v2026.06.03-11";
 const PROXY = "https://coupang-proxy-five.vercel.app/api/coupang";
 const DEFAULT_VENDOR = "A01575011";
 /* 로켓그로스 사이즈 요율표 (2025.01.06 기준, 기본 비용) */
@@ -851,6 +851,7 @@ window.openProductDetail = function (id) {
     '<button data-pd="stock">재고관리</button>' +
     '<button data-pd="ad">광고</button>' +
     '<button data-pd="settle">정산</button>' +
+    '<button data-pd="competitor">경쟁사</button>' +
     '<button data-pd="detail">상세정보</button></div>' +
     '<div id="pd-body"></div>' +
     '<div class="btn-row" style="margin-top:14px"><button class="btn sec" onclick="editProduct(\'' + id + '\')">상품 수정</button>' +
@@ -900,6 +901,19 @@ window.openProductDetail = function (id) {
     if (tab === "settle") {
       return '<div class="hint" style="margin-bottom:8px">정산 API 미연동 — 최근 14일 매출 기반 추정입니다.</div>' +
         '<div class="calc-line total"><span class="k">정산대기(추정)</span><span class="v">' + won(estimateSettlement()) + '</span></div>';
+    }
+    if (tab === "competitor") {
+      const comps = Array.isArray(p.competitors) ? p.competitors : [];
+      const list = comps.length ? comps.map((c, i) =>
+        '<div class="list-item"><div class="info" style="min-width:0;flex:1">' +
+        '<div class="name">' + esc(c.label || "경쟁사 " + (i + 1)) + '</div>' +
+        '<div class="meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.url) + '</div></div>' +
+        '<div class="acts"><button class="btn sm sec" onclick="openCompetitor(\'' + id + '\',' + i + ')">열기</button>' +
+        '<button class="btn sm ghost" onclick="delCompetitor(\'' + id + '\',' + i + ')">×</button></div></div>'
+      ).join("") : '<div class="empty">등록된 경쟁사 링크가 없습니다.</div>';
+      return '<div class="hint" style="margin-bottom:8px">경쟁사 쿠팡 상품 페이지를 저장하고 바로 열 수 있습니다.</div>' +
+        '<div id="compList">' + list + '</div>' +
+        '<button class="btn sm sec" style="margin-top:10px" onclick="addCompetitor(\'' + id + '\')">＋ 경쟁사 추가</button>';
     }
     // detail
     const m = productUnitMargin(p);
@@ -965,6 +979,41 @@ window.saveProduct = async function (id) {
 window.delProduct = async function (id) {
   D.products = D.products.filter(x => x.id !== id);
   await saveD(); closeModal(); renderProducts(); renderHome(); renderAnalysis(); toast("삭제됨");
+};
+
+/* 경쟁사 링크 */
+window.addCompetitor = function (id) {
+  openModal(
+    '<div class="modal-head"><h2>경쟁사 링크 추가</h2><button class="x" onclick="closeModal()">×</button></div>' +
+    '<div class="field"><label>이름 (선택)</label><input id="cp_label" placeholder="예: A사 여권케이스"></div>' +
+    '<div class="field"><label>쿠팡 상품 주소</label><input id="cp_url" placeholder="https://www.coupang.com/vp/products/..."></div>' +
+    '<button class="btn" onclick="saveCompetitor(\'' + id + '\')">저장</button>'
+  );
+};
+window.saveCompetitor = async function (id) {
+  const p = D.products.find(x => x.id === id); if (!p) return;
+  let url = $("#cp_url").value.trim();
+  if (!url) { toast("주소를 입력하세요"); return; }
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  if (!Array.isArray(p.competitors)) p.competitors = [];
+  p.competitors.push({ label: $("#cp_label").value.trim(), url });
+  await saveD(); closeModal(); openProductDetail(id);
+  // 경쟁사 탭으로 이동
+  const btn = document.querySelector('#pdSub button[data-pd="competitor"]');
+  if (btn) btn.click();
+  toast("경쟁사 추가됨");
+};
+window.openCompetitor = function (id, idx) {
+  const p = D.products.find(x => x.id === id); if (!p || !p.competitors || !p.competitors[idx]) return;
+  window.open(p.competitors[idx].url, "_blank", "noopener");
+};
+window.delCompetitor = async function (id, idx) {
+  const p = D.products.find(x => x.id === id); if (!p || !Array.isArray(p.competitors)) return;
+  p.competitors.splice(idx, 1);
+  await saveD(); openProductDetail(id);
+  const btn = document.querySelector('#pdSub button[data-pd="competitor"]');
+  if (btn) btn.click();
+  toast("삭제됨");
 };
 
 /* 사입 기록 */
