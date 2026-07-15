@@ -164,13 +164,13 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
     </div>
     <div class="card">
       <h2>월별 순수익 추이</h2>
-      <div class="chart-wrap"><canvas id="homeChart"></canvas></div>
+      <div class="chart-wrap" data-for="homeChart"><canvas id="homeChart"></canvas></div>
     </div>
     <div class="card">
       <h2>최근 동기화</h2>
       <div id="syncStatus" class="dim" style="font-size:13px">아직 동기화하지 않았습니다.</div>
     </div>
-    <div class="version" id="versionTag">v2026.06.03-11</div>
+    <div class="version" id="versionTag">v2026.06.03-14</div>
   </div>
 
   <!-- PRODUCTS -->
@@ -195,25 +195,6 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
         </div>
         <div class="table-scroll"><table class="table" id="sourceTable"></table></div>
       </div>
-      <div class="card">
-        <h2>판매 시뮬레이션</h2>
-        <div class="row" style="margin-bottom:10px">
-          <div class="field"><label>판매수량(개)</label><input type="number" id="sim_qty" value="1"></div>
-          <div class="field"><label>건당 판매갯수</label><input type="number" id="sim_bundle" value="1"></div>
-          <div class="field"><label>반품율(%)</label><input type="number" id="sim_return" value="0"></div>
-        </div>
-        <div class="row" style="margin-bottom:10px">
-          <div class="field"><label>판매가</label><input type="number" id="sim_price" placeholder="15000"></div>
-          <div class="field"><label>매입가</label><input type="number" id="sim_cost" placeholder="7130"></div>
-        </div>
-        <div class="row" style="margin-bottom:10px">
-          <div class="field"><label>수수료율%</label><input type="number" id="sim_fee" value="10.8"></div>
-          <div class="field"><label>입출고비</label><input type="number" id="sim_full" value="1100"></div>
-          <div class="field"><label>배송비</label><input type="number" id="sim_ship" value="2118"></div>
-        </div>
-        <button class="btn" id="runSim">계산하기</button>
-        <div class="calc-out" id="sim_out" style="display:none;margin-top:12px"></div>
-      </div>
     </div>
   </div>
 
@@ -233,8 +214,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   <!-- ANALYSIS -->
   <div class="page" id="page-analysis">
     <div class="topbar"><h1>분석</h1></div>
-    <div class="card"><h2>월별 순수익</h2><div class="chart-wrap"><canvas id="anMonthChart"></canvas></div></div>
-    <div class="card"><h2>상품별 순수익</h2><div class="chart-wrap"><canvas id="anProdChart"></canvas></div></div>
+    <div class="card"><h2>월별 순수익</h2><div class="chart-wrap" data-for="anMonthChart"><canvas id="anMonthChart"></canvas></div></div>
+    <div class="card"><h2>상품별 순수익</h2><div class="chart-wrap" data-for="anProdChart"><canvas id="anProdChart"></canvas></div></div>
     <div class="card"><h2>상품별 지표</h2><div class="table-scroll"><table class="table" id="prodMetricTable"></table></div></div>
     <div class="card"><h2>월별 실적</h2><div class="table-scroll"><table class="table" id="monthPerfTable"></table></div></div>
     <div class="card">
@@ -327,7 +308,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 <script>
 "use strict";
 
-const VERSION = "v2026.06.03-11";
+const VERSION = "v2026.06.03-14";
 const PROXY = "https://coupang-proxy-five.vercel.app/api/coupang";
 const DEFAULT_VENDOR = "A01575011";
 /* 로켓그로스 사이즈 요율표 (2025.01.06 기준, 기본 비용) */
@@ -630,11 +611,20 @@ function renderHome() {
 }
 function barChart(canvasSel, key, labels, data) {
   const c = chartColors();
-  const wrap = $(canvasSel).parentElement;
+  const canvasId = canvasSel.slice(1);
+  let canvas = $(canvasSel);
+  // canvas가 이전에 지워졌으면 wrap을 chart-wrap 클래스로 찾아 복구
+  let wrap = canvas ? canvas.parentElement : document.querySelector('.chart-wrap[data-for="' + canvasId + '"]');
+  if (!wrap) {
+    // fallback: id 기반으로 wrap 탐색 실패 시 아무 작업 안 함
+    return;
+  }
   destroyChart(key);
   if (!data.length) { wrap.innerHTML = '<div class="empty" style="padding-top:78px">데이터가 없습니다. 설정 탭에서 동기화하세요.</div>'; return; }
-  if (!wrap.querySelector("canvas")) wrap.innerHTML = '<canvas id="' + canvasSel.slice(1) + '"></canvas>';
-  charts[key] = new Chart($(canvasSel), {
+  if (!wrap.querySelector("canvas")) wrap.innerHTML = '<canvas id="' + canvasId + '"></canvas>';
+  canvas = $(canvasSel);
+  if (!canvas || typeof Chart === "undefined") return;
+  charts[key] = new Chart(canvas, {
     type: "bar",
     data: { labels, datasets: [{ data: data.map(v => Math.round(v)), backgroundColor: data.map(v => v >= 0 ? "#ff6b35" : "#ef4444"), borderRadius: 6 }] },
     options: {
@@ -684,7 +674,7 @@ function renderSourcing() {
       const m = unitMargin(s.expectPrice, fee, s.fulfill || 0, s.ship || 0, cnyCost);
       const tagCls = { "검토중": "", "사입예정": "blue", "사입확정": "green", "제외": "red" }[s.state] || "";
       return '<tr onclick="editSource(\'' + s.id + '\')" style="cursor:pointer">' +
-        '<td>' + esc(s.keyword) + '</td><td>' + won(s.expectPrice) + '</td>' +
+        '<td>' + esc(s.keyword) + (Array.isArray(s.competitors) && s.competitors.length ? ' <span class="tag blue">🔗' + s.competitors.length + '</span>' : '') + '</td><td>' + won(s.expectPrice) + '</td>' +
         '<td>¥' + (s.cnyPrice || 0) + '</td><td class="' + (m >= 0 ? "pos" : "neg") + '">' + won(m) + '</td>' +
         '<td><span class="tag ' + tagCls + '" onclick="event.stopPropagation();cycleSource(\'' + s.id + '\')">' + s.state + '</span></td></tr>';
     }).join("") + '</tbody>';
@@ -722,12 +712,14 @@ function renderAnalysis() {
     map[name] = (map[name] || 0) + saleProfit(s).profit;
   });
   const entries = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const wrap = $("#anProdChart").parentElement;
+  const anCanvas = $("#anProdChart");
+  const wrap = anCanvas ? anCanvas.parentElement : document.querySelector('.chart-wrap[data-for="anProdChart"]');
   destroyChart("anProd");
-  if (!entries.length) { wrap.innerHTML = '<div class="empty" style="padding-top:78px">데이터가 없습니다.</div>'; }
+  if (!wrap) { /* wrap 없음 */ }
+  else if (!entries.length) { wrap.innerHTML = '<div class="empty" style="padding-top:78px">데이터가 없습니다.</div>'; }
   else {
     if (!wrap.querySelector("canvas")) wrap.innerHTML = '<canvas id="anProdChart"></canvas>';
-    charts.anProd = new Chart($("#anProdChart"), {
+    if (typeof Chart !== "undefined" && $("#anProdChart")) charts.anProd = new Chart($("#anProdChart"), {
       type: "bar",
       data: { labels: entries.map(e => e[0].slice(0, 12)), datasets: [{ data: entries.map(e => Math.round(e[1])), backgroundColor: "#ff6b35", borderRadius: 6 }] },
       options: {
@@ -852,6 +844,7 @@ window.openProductDetail = function (id) {
     '<button data-pd="ad">광고</button>' +
     '<button data-pd="settle">정산</button>' +
     '<button data-pd="competitor">경쟁사</button>' +
+    '<button data-pd="sim">판매시뮬</button>' +
     '<button data-pd="detail">상세정보</button></div>' +
     '<div id="pd-body"></div>' +
     '<div class="btn-row" style="margin-top:14px"><button class="btn sec" onclick="editProduct(\'' + id + '\')">상품 수정</button>' +
@@ -901,6 +894,22 @@ window.openProductDetail = function (id) {
     if (tab === "settle") {
       return '<div class="hint" style="margin-bottom:8px">정산 API 미연동 — 최근 14일 매출 기반 추정입니다.</div>' +
         '<div class="calc-line total"><span class="k">정산대기(추정)</span><span class="v">' + won(estimateSettlement()) + '</span></div>';
+    }
+    if (tab === "sim") {
+      return '<div class="hint" style="margin-bottom:8px">이 상품 값이 기본 입력됩니다. 수량·반품율을 바꿔 시뮬레이션하세요.</div>' +
+        '<div class="row" style="margin-bottom:10px">' +
+        '<div class="field"><label>판매수량(개)</label><input type="number" id="sim_qty" value="1"></div>' +
+        '<div class="field"><label>건당 판매갯수</label><input type="number" id="sim_bundle" value="1"></div>' +
+        '<div class="field"><label>반품율(%)</label><input type="number" id="sim_return" value="0"></div></div>' +
+        '<div class="row" style="margin-bottom:10px">' +
+        '<div class="field"><label>판매가</label><input type="number" id="sim_price" value="' + (p.price || "") + '"></div>' +
+        '<div class="field"><label>매입가</label><input type="number" id="sim_cost" value="' + (p.cost || "") + '"></div></div>' +
+        '<div class="row" style="margin-bottom:10px">' +
+        '<div class="field"><label>수수료율%</label><input type="number" id="sim_fee" value="' + (p.feeRate || "") + '"></div>' +
+        '<div class="field"><label>입출고비</label><input type="number" id="sim_full" value="' + (p.fulfill || "") + '"></div>' +
+        '<div class="field"><label>배송비</label><input type="number" id="sim_ship" value="' + (p.ship || "") + '"></div></div>' +
+        '<button class="btn" onclick="runSaleSim()">계산하기</button>' +
+        '<div class="calc-out" id="sim_out" style="display:none;margin-top:12px"></div>';
     }
     if (tab === "competitor") {
       const comps = Array.isArray(p.competitors) ? p.competitors : [];
@@ -1046,7 +1055,7 @@ $("#addSource").addEventListener("click", async () => {
     $("#sourceKeyword").value = ""; await saveD(); renderSourcing(); toast("후보 추가됨");
   } catch (err) { console.error(err); toast("오류: " + (err && err.message ? err.message : "추가 실패")); }
 });
-function runSaleSim() {
+window.runSaleSim = function () {
   const qty = num($("#sim_qty").value) || 1;
   const bundle = num($("#sim_bundle").value) || 1;
   const retRate = num($("#sim_return").value) / 100;
@@ -1082,7 +1091,7 @@ function runSaleSim() {
     '<div class="calc-line"><span class="k">손익기준 ROAS</span><span class="v">' + (isFinite(roiEnd) ? Math.round(roiEnd) + "%" : "∞") + '</span></div>' +
     '<div class="hint" style="margin-top:6px">모든 비용은 부가세 포함, 마진은 부가세 제외 금액입니다.</div>';
 }
-$("#runSim") && $("#runSim").addEventListener("click", runSaleSim);
+/* runSaleSim은 상품상세 판매시뮬 탭에서 onclick으로 호출 */
 window.cycleSource = async function (id) {
   const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
   s.state = SOURCE_STATES[(SOURCE_STATES.indexOf(s.state) + 1) % SOURCE_STATES.length];
@@ -1097,6 +1106,10 @@ window.editSource = function (id) {
     '<div class="field"><label>위안 매입가 (¥)</label><input type="number" id="sc_cny" value="' + (s.cnyPrice || "") + '"></div></div>' +
     '<div class="row"><div class="field"><label>수수료율 %</label><input type="number" id="sc_fee" value="' + (s.feeRate || "") + '"></div>' +
     '<div class="field"><label>목표 마진율 %</label><input type="number" id="sc_target" value="' + (s.target || 50) + '"></div></div>' +
+    '<div class="field"><label>사이즈 직접 선택 (크기 모를 때)</label><select id="sc_sizesel">' +
+    '<option value="">— 크기 입력으로 자동판정 —</option>' +
+    RG_SIZES.map(z => '<option value="' + z.name + '"' + (s.sizeManual === z.name ? " selected" : "") + '>' + z.name + ' (입출고 ' + z.fulfill + ' · 배송 ' + z.ship + ')</option>').join("") +
+    '</select><div class="hint">선택하면 아래 크기값 없이도 입출고비·배송비가 적용됩니다.</div></div>' +
     '<div class="row"><div class="field"><label>입출고비</label><input type="number" id="sc_full" value="' + (s.fulfill || "") + '"></div>' +
     '<div class="field"><label>배송비</label><input type="number" id="sc_ship" value="' + (s.ship || "") + '"></div></div>' +
     '<div class="row"><div class="field"><label>가로mm</label><input type="number" id="sc_w" value="' + (s.w || "") + '"></div>' +
@@ -1104,11 +1117,20 @@ window.editSource = function (id) {
     '<div class="row"><div class="field"><label>높이mm</label><input type="number" id="sc_h" value="' + (s.h || "") + '"></div>' +
     '<div class="field"><label>무게g</label><input type="number" id="sc_wt" value="' + (s.wt || "") + '"></div></div>' +
     '<div class="calc-out" id="sc_prev"></div>' +
+    '<div style="margin-top:14px"><label>경쟁사 쿠팡 링크</label><div id="sc_complist"></div>' +
+    '<button class="btn sm sec" style="margin-top:8px" onclick="addSourceCompetitor(\'' + id + '\')">＋ 경쟁사 추가</button></div>' +
     '<div class="btn-row" style="margin-top:12px"><button class="btn" onclick="saveSource(\'' + id + '\')">저장</button>' +
     '<button class="btn sec" onclick="sourceToProduct(\'' + id + '\')">사입처리→상품등록</button></div>' +
     '<button class="btn ghost sm" style="margin-top:8px" onclick="delSource(\'' + id + '\')">삭제</button>'
   );
+  renderSourceCompetitors(id);
   ["sc_price", "sc_cny", "sc_fee", "sc_target", "sc_full", "sc_ship", "sc_w", "sc_d", "sc_h", "sc_wt"].forEach(f => $("#" + f).addEventListener("input", prevSource));
+  $("#sc_sizesel").addEventListener("change", () => {
+    const sel = $("#sc_sizesel").value;
+    const z = RG_SIZES.find(x => x.name === sel);
+    if (z) { $("#sc_full").value = z.fulfill; $("#sc_ship").value = z.ship; }
+    prevSource();
+  });
   prevSource();
 };
 function sizeCategory(w, d, h, wt) {
@@ -1129,8 +1151,10 @@ function prevSource() {
   const cnyCost = num($("#sc_cny").value) * num(D.settings.cnyRate);
   const feeRate = num($("#sc_fee").value);
   const fee = feeAmount(price, feeRate);
-  const size = sizeCategory($("#sc_w").value, $("#sc_d").value, $("#sc_h").value, $("#sc_wt").value);
-  // 크기 입력 시 요율표 값 자동 채움 (칸이 비어있을 때만)
+  const manualSel = $("#sc_sizesel") ? $("#sc_sizesel").value : "";
+  const manualSize = manualSel ? RG_SIZES.find(z => z.name === manualSel) : null;
+  const size = manualSize || sizeCategory($("#sc_w").value, $("#sc_d").value, $("#sc_h").value, $("#sc_wt").value);
+  // 크기 입력/선택 시 요율표 값 자동 채움 (칸이 비어있을 때만)
   if (size && !size.over) {
     if (!$("#sc_full").value) $("#sc_full").value = size.fulfill;
     if (!$("#sc_ship").value) $("#sc_ship").value = size.ship;
@@ -1144,7 +1168,7 @@ function prevSource() {
   const denom = 1 - (feeRate / 100) * 1.1 - target / 100;
   const fixedCost = cnyCost + (fulfill + ship) * 1.1;
   const targetPrice = denom > 0 ? fixedCost / denom : 0;
-  const sizeLabel = size ? (size.over ? "취급불가(250cm/30kg 초과)" : size.name + " (입출고 " + won(size.fulfill) + " · 배송 " + won(size.ship) + ")") : "-";
+  const sizeLabel = size ? (size.over ? "취급불가(250cm/30kg 초과)" : size.name + (manualSize ? " (선택)" : "") + " (입출고 " + won(size.fulfill) + " · 배송 " + won(size.ship) + ")") : "-";
   $("#sc_prev").innerHTML =
     '<div class="calc-line"><span class="k">원화 매입가 (₩' + D.settings.cnyRate + '/元)</span><span class="v">' + won(cnyCost) + '</span></div>' +
     '<div class="calc-line"><span class="k">판매수수료</span><span class="v">' + won(fee) + '</span></div>' +
@@ -1162,11 +1186,61 @@ window.saveSource = async function (id) {
   s.feeRate = num($("#sc_fee").value); s.target = num($("#sc_target").value) || 50;
   s.fulfill = num($("#sc_full").value); s.ship = num($("#sc_ship").value);
   s.w = num($("#sc_w").value); s.d = num($("#sc_d").value); s.h = num($("#sc_h").value); s.wt = num($("#sc_wt").value);
+  s.sizeManual = $("#sc_sizesel") ? $("#sc_sizesel").value : "";
   await saveD(); closeModal(); renderSourcing(); toast("저장됨");
 };
 window.delSource = async function (id) {
   D.sourcingCandidates = D.sourcingCandidates.filter(x => x.id !== id);
   await saveD(); closeModal(); renderSourcing(); toast("삭제됨");
+};
+/* 소싱 후보 경쟁사 링크 */
+function renderSourceCompetitors(id) {
+  const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
+  const el = $("#sc_complist"); if (!el) return;
+  const comps = Array.isArray(s.competitors) ? s.competitors : [];
+  el.innerHTML = comps.length ? comps.map((c, i) =>
+    '<div class="list-item"><div class="info" style="min-width:0;flex:1">' +
+    '<div class="name">' + esc(c.label || "경쟁사 " + (i + 1)) + '</div>' +
+    '<div class="meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.url) + '</div></div>' +
+    '<div class="acts"><button class="btn sm sec" onclick="openSourceCompetitor(\'' + id + '\',' + i + ')">열기</button>' +
+    '<button class="btn sm ghost" onclick="delSourceCompetitor(\'' + id + '\',' + i + ')">×</button></div></div>'
+  ).join("") : '<div class="hint">등록된 경쟁사 링크가 없습니다.</div>';
+}
+window.addSourceCompetitor = function (id) {
+  // 현재 편집중인 입력값을 먼저 저장 (모달 전환 시 유실 방지)
+  const s = D.sourcingCandidates.find(x => x.id === id);
+  if (s && $("#sc_kw")) {
+    s.keyword = $("#sc_kw").value.trim();
+    s.expectPrice = num($("#sc_price").value); s.cnyPrice = num($("#sc_cny").value);
+    s.feeRate = num($("#sc_fee").value); s.target = num($("#sc_target").value) || 50;
+    s.fulfill = num($("#sc_full").value); s.ship = num($("#sc_ship").value);
+    s.w = num($("#sc_w").value); s.d = num($("#sc_d").value); s.h = num($("#sc_h").value); s.wt = num($("#sc_wt").value);
+    s.sizeManual = $("#sc_sizesel") ? $("#sc_sizesel").value : "";
+  }
+  openModal(
+    '<div class="modal-head"><h2>경쟁사 링크 추가</h2><button class="x" onclick="editSource(\'' + id + '\')">×</button></div>' +
+    '<div class="field"><label>이름 (선택)</label><input id="scp_label" placeholder="예: B사 튜브의자"></div>' +
+    '<div class="field"><label>쿠팡 상품 주소</label><input id="scp_url" placeholder="https://www.coupang.com/vp/products/..."></div>' +
+    '<button class="btn" onclick="saveSourceCompetitor(\'' + id + '\')">저장</button>'
+  );
+};
+window.saveSourceCompetitor = async function (id) {
+  const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
+  let url = $("#scp_url").value.trim();
+  if (!url) { toast("주소를 입력하세요"); return; }
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  if (!Array.isArray(s.competitors)) s.competitors = [];
+  s.competitors.push({ label: $("#scp_label").value.trim(), url });
+  await saveD(); editSource(id); toast("경쟁사 추가됨");
+};
+window.openSourceCompetitor = function (id, idx) {
+  const s = D.sourcingCandidates.find(x => x.id === id); if (!s || !s.competitors || !s.competitors[idx]) return;
+  window.open(s.competitors[idx].url, "_blank", "noopener");
+};
+window.delSourceCompetitor = async function (id, idx) {
+  const s = D.sourcingCandidates.find(x => x.id === id); if (!s || !Array.isArray(s.competitors)) return;
+  s.competitors.splice(idx, 1);
+  await saveD(); renderSourceCompetitors(id); toast("삭제됨");
 };
 window.sourceToProduct = async function (id) {
   const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
@@ -1175,7 +1249,8 @@ window.sourceToProduct = async function (id) {
     id: uid(), name: $("#sc_kw").value.trim() || s.keyword, optionId: "",
     price: num($("#sc_price").value), feeRate: num($("#sc_fee").value),
     fulfill: num($("#sc_full").value), ship: num($("#sc_ship").value),
-    cost: Math.round(cnyCost), category: "소싱"
+    cost: Math.round(cnyCost), category: "소싱",
+    competitors: Array.isArray(s.competitors) ? s.competitors.slice() : []
   });
   s.state = "사입확정";
   await saveD(); closeModal(); renderSourcing(); renderProducts(); toast("상품으로 등록됨");
