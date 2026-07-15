@@ -170,7 +170,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
       <h2>최근 동기화</h2>
       <div id="syncStatus" class="dim" style="font-size:13px">아직 동기화하지 않았습니다.</div>
     </div>
-    <div class="version" id="versionTag">v2026.06.03-07</div>
+    <div class="version" id="versionTag">v2026.06.03-08</div>
   </div>
 
   <!-- PRODUCTS -->
@@ -308,11 +308,11 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 <script>
 "use strict";
 
-const VERSION = "v2026.06.03-07";
+const VERSION = "v2026.06.03-08";
 const PROXY = "https://coupang-proxy-five.vercel.app/api/coupang";
 const DEFAULT_VENDOR = "A01575011";
 const DB_NAME = "coupang_v2";
-const DB_VER = 1;
+const DB_VER = 2;
 const STORE = "kv";
 
 /* ===== 데이터 구조 D ===== */
@@ -337,6 +337,13 @@ function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VER);
     req.onupgradeneeded = (e) => {
       const d = e.target.result;
+      // 기존 스토어가 잘못된 keyPath로 존재하면 삭제 후 재생성
+      if (d.objectStoreNames.contains(STORE)) {
+        try {
+          const existing = e.target.transaction.objectStore(STORE);
+          if (existing.keyPath !== "key") d.deleteObjectStore(STORE);
+        } catch (err) { /* 무시하고 아래서 보장 */ }
+      }
       if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: "key" });
     };
     req.onsuccess = (e) => { db = e.target.result; resolve(db); };
@@ -345,20 +352,27 @@ function openDB() {
 }
 function loadD() {
   return new Promise((resolve) => {
-    const r = db.transaction(STORE, "readonly").objectStore(STORE).get("D");
-    r.onsuccess = () => {
-      if (r.result && r.result.value) D = Object.assign(D, r.result.value);
-      if (!D.settings) D.settings = { vatRegistered: false, cnyRate: 310, marginTarget: 40 };
-      resolve();
-    };
-    r.onerror = () => resolve();
+    try {
+      const r = db.transaction(STORE, "readonly").objectStore(STORE).get("D");
+      r.onsuccess = () => {
+        if (r.result && r.result.value) D = Object.assign(D, r.result.value);
+        if (!D.settings) D.settings = { vatRegistered: false, cnyRate: 310, marginTarget: 40 };
+        resolve();
+      };
+      r.onerror = () => resolve();
+    } catch (err) { resolve(); }
   });
 }
 function saveD() {
   return new Promise((resolve, reject) => {
-    const r = db.transaction(STORE, "readwrite").objectStore(STORE).put({ key: "D", value: D });
-    r.onsuccess = () => resolve();
-    r.onerror = () => reject(r.error);
+    try {
+      // 직렬화 가능한 순수 객체로 복제 (함수/순환참조 제거)
+      const clean = JSON.parse(JSON.stringify(D));
+      const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+      const r = store.put({ key: "D", value: clean });
+      r.onsuccess = () => resolve();
+      r.onerror = () => reject(r.error);
+    } catch (err) { reject(err); }
   });
 }
 
