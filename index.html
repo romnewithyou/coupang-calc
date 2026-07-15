@@ -170,7 +170,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
       <h2>최근 동기화</h2>
       <div id="syncStatus" class="dim" style="font-size:13px">아직 동기화하지 않았습니다.</div>
     </div>
-    <div class="version" id="versionTag">v2026.06.03-08</div>
+    <div class="version" id="versionTag">v2026.06.03-10</div>
   </div>
 
   <!-- PRODUCTS -->
@@ -194,6 +194,25 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
           <button class="btn sm" id="addSource" style="flex:1">추가</button>
         </div>
         <div class="table-scroll"><table class="table" id="sourceTable"></table></div>
+      </div>
+      <div class="card">
+        <h2>판매 시뮬레이션</h2>
+        <div class="row" style="margin-bottom:10px">
+          <div class="field"><label>판매수량(개)</label><input type="number" id="sim_qty" value="1"></div>
+          <div class="field"><label>건당 판매갯수</label><input type="number" id="sim_bundle" value="1"></div>
+          <div class="field"><label>반품율(%)</label><input type="number" id="sim_return" value="0"></div>
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <div class="field"><label>판매가</label><input type="number" id="sim_price" placeholder="15000"></div>
+          <div class="field"><label>매입가</label><input type="number" id="sim_cost" placeholder="7130"></div>
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <div class="field"><label>수수료율%</label><input type="number" id="sim_fee" value="10.8"></div>
+          <div class="field"><label>입출고비</label><input type="number" id="sim_full" value="1100"></div>
+          <div class="field"><label>배송비</label><input type="number" id="sim_ship" value="2118"></div>
+        </div>
+        <button class="btn" id="runSim">계산하기</button>
+        <div class="calc-out" id="sim_out" style="display:none;margin-top:12px"></div>
       </div>
     </div>
   </div>
@@ -308,9 +327,18 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 <script>
 "use strict";
 
-const VERSION = "v2026.06.03-08";
+const VERSION = "v2026.06.03-10";
 const PROXY = "https://coupang-proxy-five.vercel.app/api/coupang";
 const DEFAULT_VENDOR = "A01575011";
+/* 로켓그로스 사이즈 요율표 (2025.01.06 기준, 기본 비용) */
+const RG_SIZES = [
+  { name: "극소형", maxCm: 80, maxKg: 2, fulfill: 1650, ship: 2200, bundle: true },
+  { name: "소형", maxCm: 100, maxKg: 5, fulfill: 1750, ship: 2400, bundle: true },
+  { name: "중형", maxCm: 120, maxKg: 10, fulfill: 2000, ship: 3000, bundle: true },
+  { name: "대형1", maxCm: 140, maxKg: 15, fulfill: 2400, ship: 4000, bundle: true },
+  { name: "대형2", maxCm: 160, maxKg: 20, fulfill: 2400, ship: 5500, bundle: false },
+  { name: "특대형", maxCm: 250, maxKg: 30, fulfill: 2400, ship: 9500, bundle: false }
+];
 const DB_NAME = "coupang_v2";
 const DB_VER = 2;
 const STORE = "kv";
@@ -969,6 +997,43 @@ $("#addSource").addEventListener("click", async () => {
     $("#sourceKeyword").value = ""; await saveD(); renderSourcing(); toast("후보 추가됨");
   } catch (err) { console.error(err); toast("오류: " + (err && err.message ? err.message : "추가 실패")); }
 });
+function runSaleSim() {
+  const qty = num($("#sim_qty").value) || 1;
+  const bundle = num($("#sim_bundle").value) || 1;
+  const retRate = num($("#sim_return").value) / 100;
+  const price = num($("#sim_price").value);
+  const cost = num($("#sim_cost").value);
+  const feeRate = num($("#sim_fee").value);
+  const fulfill = num($("#sim_full").value), ship = num($("#sim_ship").value);
+  // 건당 판매갯수에 따라 배송비/입출고비 반영
+  const fee = feeAmount(price, feeRate);
+  const feeVat = fee * 1.1;
+  const fulfillTot = fulfill * 1.1 * qty * bundle;
+  const shipTot = ship * 1.1 * qty;
+  const revenue = price * qty;
+  const costTot = cost * qty * bundle;
+  const feeTot = feeVat * qty;
+  // 반품 비용: (반품배송비+재입고비)=배송비+입출고비 기준, 반품율만큼 차감
+  const returnShip = ship * 1.1 * qty * retRate;
+  const reStock = fulfill * 1.1 * qty * bundle * retRate;
+  const totalMargin = revenue - feeTot - fulfillTot - shipTot - costTot - returnShip - reStock;
+  const roi = revenue > 0 ? (totalMargin / revenue) * 100 : 0;
+  const roiEnd = totalMargin > 0 ? (revenue / totalMargin) * 1.1 * 100 : Infinity;
+  $("#sim_out").style.display = "block";
+  $("#sim_out").innerHTML =
+    '<div class="calc-line"><span class="k">총매출</span><span class="v">' + won(revenue) + '</span></div>' +
+    '<div class="calc-line"><span class="k">총판매수수료</span><span class="v">' + won(feeTot) + ' (' + pctStr(feeRate) + ')</span></div>' +
+    '<div class="calc-line"><span class="k">총입출고비</span><span class="v">' + won(fulfillTot) + '</span></div>' +
+    '<div class="calc-line"><span class="k">총배송비</span><span class="v">' + won(shipTot) + '</span></div>' +
+    '<div class="calc-line"><span class="k">총매입원가</span><span class="v">' + won(costTot) + '</span></div>' +
+    '<div class="calc-line"><span class="k">총반품배송비</span><span class="v">' + won(returnShip) + '</span></div>' +
+    '<div class="calc-line"><span class="k">총재입고비</span><span class="v">' + won(reStock) + '</span></div>' +
+    '<div class="calc-line total"><span class="k">총마진</span><span class="v ' + (totalMargin >= 0 ? "pos" : "neg") + '">' + won(totalMargin) + '</span></div>' +
+    '<div class="calc-line"><span class="k">전체마진율(ROI)</span><span class="v">' + pctStr(roi) + '</span></div>' +
+    '<div class="calc-line"><span class="k">손익기준 ROAS</span><span class="v">' + (isFinite(roiEnd) ? Math.round(roiEnd) + "%" : "∞") + '</span></div>' +
+    '<div class="hint" style="margin-top:6px">모든 비용은 부가세 포함, 마진은 부가세 제외 금액입니다.</div>';
+}
+$("#runSim") && $("#runSim").addEventListener("click", runSaleSim);
 window.cycleSource = async function (id) {
   const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
   s.state = SOURCE_STATES[(SOURCE_STATES.indexOf(s.state) + 1) % SOURCE_STATES.length];
@@ -982,34 +1047,72 @@ window.editSource = function (id) {
     '<div class="row"><div class="field"><label>예상 판매가</label><input type="number" id="sc_price" value="' + (s.expectPrice || "") + '"></div>' +
     '<div class="field"><label>위안 매입가 (¥)</label><input type="number" id="sc_cny" value="' + (s.cnyPrice || "") + '"></div></div>' +
     '<div class="row"><div class="field"><label>수수료율 %</label><input type="number" id="sc_fee" value="' + (s.feeRate || "") + '"></div>' +
-    '<div class="field"><label>입출고비</label><input type="number" id="sc_full" value="' + (s.fulfill || "") + '"></div></div>' +
-    '<div class="field"><label>배송비</label><input type="number" id="sc_ship" value="' + (s.ship || "") + '"></div>' +
+    '<div class="field"><label>목표 마진율 %</label><input type="number" id="sc_target" value="' + (s.target || 50) + '"></div></div>' +
+    '<div class="row"><div class="field"><label>입출고비</label><input type="number" id="sc_full" value="' + (s.fulfill || "") + '"></div>' +
+    '<div class="field"><label>배송비</label><input type="number" id="sc_ship" value="' + (s.ship || "") + '"></div></div>' +
+    '<div class="row"><div class="field"><label>가로mm</label><input type="number" id="sc_w" value="' + (s.w || "") + '"></div>' +
+    '<div class="field"><label>세로mm</label><input type="number" id="sc_d" value="' + (s.d || "") + '"></div></div>' +
+    '<div class="row"><div class="field"><label>높이mm</label><input type="number" id="sc_h" value="' + (s.h || "") + '"></div>' +
+    '<div class="field"><label>무게g</label><input type="number" id="sc_wt" value="' + (s.wt || "") + '"></div></div>' +
     '<div class="calc-out" id="sc_prev"></div>' +
     '<div class="btn-row" style="margin-top:12px"><button class="btn" onclick="saveSource(\'' + id + '\')">저장</button>' +
     '<button class="btn sec" onclick="sourceToProduct(\'' + id + '\')">사입처리→상품등록</button></div>' +
     '<button class="btn ghost sm" style="margin-top:8px" onclick="delSource(\'' + id + '\')">삭제</button>'
   );
-  ["sc_price", "sc_cny", "sc_fee", "sc_full", "sc_ship"].forEach(f => $("#" + f).addEventListener("input", prevSource));
+  ["sc_price", "sc_cny", "sc_fee", "sc_target", "sc_full", "sc_ship", "sc_w", "sc_d", "sc_h", "sc_wt"].forEach(f => $("#" + f).addEventListener("input", prevSource));
   prevSource();
 };
+function sizeCategory(w, d, h, wt) {
+  const cm = (num(w) + num(d) + num(h)) / 10; // mm 합 → cm
+  const kg = num(wt) / 1000; // g → kg
+  if (!cm && !kg) return null;
+  if (cm > 250 || kg > 30) return { name: "취급불가", fulfill: 0, ship: 0, over: true };
+  for (const s of RG_SIZES) {
+    if (cm <= s.maxCm && kg <= s.maxKg) return s;
+  }
+  // 한쪽이 초과하면 더 큰 구간으로: cm/kg 각각 판정 후 큰 쪽
+  const byCm = RG_SIZES.find(s => cm <= s.maxCm) || RG_SIZES[RG_SIZES.length - 1];
+  const byKg = RG_SIZES.find(s => kg <= s.maxKg) || RG_SIZES[RG_SIZES.length - 1];
+  return RG_SIZES.indexOf(byCm) >= RG_SIZES.indexOf(byKg) ? byCm : byKg;
+}
 function prevSource() {
   const price = num($("#sc_price").value);
   const cnyCost = num($("#sc_cny").value) * num(D.settings.cnyRate);
-  const fee = feeAmount(price, $("#sc_fee").value);
+  const feeRate = num($("#sc_fee").value);
+  const fee = feeAmount(price, feeRate);
+  const size = sizeCategory($("#sc_w").value, $("#sc_d").value, $("#sc_h").value, $("#sc_wt").value);
+  // 크기 입력 시 요율표 값 자동 채움 (칸이 비어있을 때만)
+  if (size && !size.over) {
+    if (!$("#sc_full").value) $("#sc_full").value = size.fulfill;
+    if (!$("#sc_ship").value) $("#sc_ship").value = size.ship;
+  }
   const fulfill = num($("#sc_full").value), ship = num($("#sc_ship").value);
+  const target = num($("#sc_target").value) || 50;
+  const cc = coupangCost(fee, fulfill, ship);
   const m = unitMargin(price, fee, fulfill, ship, cnyCost);
+  const mr = price > 0 ? (m / price) * 100 : 0;
   const roas = endRoas(price, m);
+  const denom = 1 - (feeRate / 100) * 1.1 - target / 100;
+  const fixedCost = cnyCost + (fulfill + ship) * 1.1;
+  const targetPrice = denom > 0 ? fixedCost / denom : 0;
+  const sizeLabel = size ? (size.over ? "취급불가(250cm/30kg 초과)" : size.name + " (입출고 " + won(size.fulfill) + " · 배송 " + won(size.ship) + ")") : "-";
   $("#sc_prev").innerHTML =
     '<div class="calc-line"><span class="k">원화 매입가 (₩' + D.settings.cnyRate + '/元)</span><span class="v">' + won(cnyCost) + '</span></div>' +
-    '<div class="calc-line"><span class="k">쿠팡비용(×1.1)</span><span class="v">' + won(coupangCost(fee, fulfill, ship)) + '</span></div>' +
-    '<div class="calc-line total"><span class="k">예상 단위마진</span><span class="v ' + (m >= 0 ? "pos" : "neg") + '">' + won(m) + '</span></div>' +
-    '<div class="calc-line"><span class="k">엔드ROAS</span><span class="v">' + (isFinite(roas) ? Math.round(roas) + "%" : "∞") + '</span></div>';
+    '<div class="calc-line"><span class="k">판매수수료</span><span class="v">' + won(fee) + '</span></div>' +
+    '<div class="calc-line"><span class="k">쿠팡비용(×1.1)</span><span class="v">' + won(cc) + '</span></div>' +
+    '<div class="calc-line"><span class="k">예상 단위마진</span><span class="v ' + (m >= 0 ? "pos" : "neg") + '">' + won(m) + '</span></div>' +
+    '<div class="calc-line"><span class="k">마진율(ROI)</span><span class="v">' + pctStr(mr) + '</span></div>' +
+    '<div class="calc-line"><span class="k">엔드ROAS</span><span class="v">' + (isFinite(roas) ? Math.round(roas) + "%" : "∞") + '</span></div>' +
+    '<div class="calc-line"><span class="k">사이즈</span><span class="v">' + sizeLabel + '</span></div>' +
+    '<div class="calc-line total"><span class="k">' + target + '% 마진 판매가</span><span class="v ' + (targetPrice > 0 ? "pos" : "neg") + '">' + (targetPrice > 0 ? won(targetPrice) : "불가") + '</span></div>';
 }
 window.saveSource = async function (id) {
   const s = D.sourcingCandidates.find(x => x.id === id); if (!s) return;
   s.keyword = $("#sc_kw").value.trim();
   s.expectPrice = num($("#sc_price").value); s.cnyPrice = num($("#sc_cny").value);
-  s.feeRate = num($("#sc_fee").value); s.fulfill = num($("#sc_full").value); s.ship = num($("#sc_ship").value);
+  s.feeRate = num($("#sc_fee").value); s.target = num($("#sc_target").value) || 50;
+  s.fulfill = num($("#sc_full").value); s.ship = num($("#sc_ship").value);
+  s.w = num($("#sc_w").value); s.d = num($("#sc_d").value); s.h = num($("#sc_h").value); s.wt = num($("#sc_wt").value);
   await saveD(); closeModal(); renderSourcing(); toast("저장됨");
 };
 window.delSource = async function (id) {
